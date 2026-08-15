@@ -1,6 +1,19 @@
 # dsh-roleplay
 
+[English](README-EN.md) | [简体中文](README.md)
+
 - DeepSeek Harness 角色扮演插件
+
+
+
+# 功能
+
+- 角色卡生成 / 导入，支持交互式创建角色卡
+
+- 图片生成，支持：
+  - NAI 官方接口
+  - ai.erp.sex 三方接口
+  - Stable Diffusion WebUI 本地接口
 
 
 
@@ -32,23 +45,11 @@ dsh plugin --profile web add -w github:chinosk6/dsh-roleplay
 dsh plugin --profile web add -w github:chinosk6/dsh-roleplay#v0.1.0
 ```
 
-Git 安装会跑本包的 `prepare` 来构建 `lib/`。若 pnpm 提示忽略了 build script，在 `~/.dsh/profiles/web/pnpm-workspace.yaml`加上：
+Git 安装会运行 `prepare` 来构建 `lib/`。若 pnpm 提示忽略了 build script，在 `~/.dsh/profiles/web/pnpm-workspace.yaml`加上：
 
 ```yaml
 allowBuilds:
   dsh-roleplay: true
-```
-
-然后把同一条 `add` 命令再跑一遍。
-
-### 从本地目录
-
-```bash
-git clone https://github.com/chinosk6/dsh-roleplay.git
-cd <repo>
-pnpm install
-pnpm run build
-dsh plugin --profile web add -w .
 ```
 
 
@@ -60,8 +61,6 @@ dsh plugin --profile web update dsh-roleplay
 ```
 
 然后重启 dsh。
-
-本地目录安装没有“拉远程”这一步：在仓库里 `git pull` → `pnpm install` → `pnpm run build` → 重启即可。
 
 
 
@@ -102,4 +101,4 @@ dsh plugin --profile web add -w .
 
 # 致谢
 
-- 支持导入 [RP-Hub](chinosk6/dsh-roleplay) 角色卡，部分提示词参考了此项目。
+- 支持导入 [RP-Hub](https://github.com/STA1N156/RP-Hub) 角色卡，部分提示词参考了此项目。

@@ -101,6 +101,8 @@ export const SessionBinding = z.object({
   referenceMode: z.enum(['none', 'avatar', 'custom']).optional(),
   /** One-shot stage direction appended to the NEXT user message, then cleared. */
   pendingInstruction: z.string().optional(),
+  /** Filesystem path of the session's workspace (recorded by the dock; used for workspace-scoped stores). */
+  workspacePath: z.string().optional(),
   /** Per-session override of the global choice-mode default. */
   choiceMode: z.boolean().optional(),
   updatedAt: z.number().int().default(0),

@@ -7,6 +7,12 @@ export interface RoleplaySettings {
   userName: string
   /** Optional player persona injected below the character definition. */
   userPersona: string
+  /** Subfolder inside each workspace holding that workspace's role-play data. */
+  workspaceSubfolder: string
+  /** Where generated images are stored (workspace falls back to global without one). */
+  imageStore: 'workspace' | 'global'
+  /** Default home of newly imported/created cards. */
+  cardStore: 'workspace' | 'global'
   /** Selected image backend; `none` disables every image feature. */
   imageProvider: 'none' | 'novelai' | 'sdwebui' | 'url' | 'erpsex'
   novelaiApiUrl: string
@@ -44,6 +50,9 @@ export interface RoleplaySettings {
 export const RoleplaySettings: z<RoleplaySettings> = z.object({
   userName: z.string().default('你'),
   userPersona: z.string().default(''),
+  workspaceSubfolder: z.string().default('.dsh-roleplay'),
+  imageStore: z.union(['workspace', 'global']).default('workspace'),
+  cardStore: z.union(['workspace', 'global']).default('workspace'),
   imageProvider: z.union(['none', 'novelai', 'sdwebui', 'url', 'erpsex']).default('none'),
   novelaiApiUrl: z.string().default('https://image.novelai.net/ai/generate-image'),
   novelaiApiKey: z.string().default(''),

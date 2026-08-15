@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { api } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
-import { bumpImageRevs, imageRev, imageUrlWithRev, subscribeImageRevs } from './runtime.ts'
+import { bumpImageRevs, imageRev, imageUrlWithRev, recentWorkspace, subscribeImageRevs } from './runtime.ts'
 import { useT } from './i18n.ts'
 
 interface ToolViewProps {
@@ -135,13 +135,23 @@ function GeneratedImage({ url, id, width, height }: {
     ? { width: Math.round(width * scale), height: Math.round(height * scale) }
     : undefined
 
+  // Workspace-stored images carry their workspace in the URL query; the
+  // readiness endpoint needs the same context to find the file.
+  const wsParam = (() => {
+    try {
+      return new URL(url, window.location.origin).searchParams.get('ws') ?? undefined
+    } catch {
+      return undefined
+    }
+  })()
+
   useEffect(() => {
     if (phase !== 'waiting' || !id) return
     let alive = true
     let timer: ReturnType<typeof setTimeout>
     const poll = async () => {
       try {
-        const { states } = await api.imageStates([id])
+        const { states } = await api.imageStates([id], wsParam)
         if (!alive) return
         const state = states[id]
         if (state?.status === 'ready') {
@@ -164,7 +174,7 @@ function GeneratedImage({ url, id, width, height }: {
       alive = false
       clearTimeout(timer)
     }
-  }, [phase, id])
+  }, [phase, id, wsParam])
 
   if (phase === 'failed') {
     return <div className="rp-imgtile rp-imgfail" style={box}>{t('rp.tool.genFailed')}{reason ? `：${reason}` : ''}</div>
@@ -236,7 +246,7 @@ export function SaveCardView({ block }: ToolViewProps): ReactNode {
         </span>
         <span className="rp-note">{t('rp.tool.cardHint')}</span>
       </div>
-      <CardEditor cardId={cardId} />
+      <CardEditor cardId={cardId} ws={recentWorkspace()?.path} />
       <span className="rp-note">{t('rp.tool.cardManage')}</span>
     </div>
   )

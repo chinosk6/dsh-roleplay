@@ -108,7 +108,7 @@ export function apply(ctx: Context, config: Config): void {
         const svc = service()
         const agent = agentOf(context)
         const binding = agent ? svc.getBinding(String(agent.id)) : undefined
-        const card = binding?.characterId ? svc.getCard(binding.characterId) : undefined
+        const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
         if (!card) return ''
         return escapeBraces(forgeBoundCardSection(card))
       },
@@ -127,7 +127,7 @@ export function apply(ctx: Context, config: Config): void {
       const settings = svc.settings.get()
       const agent = agentOf(context)
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
-      const card = binding?.characterId ? svc.getCard(binding.characterId) : undefined
+      const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
       const parts = [roleplayStandingRules(settings.userName)]
       if (card) {
         parts.push(characterSection(card, settings.userName, settings.userPersona, recentText(agent)))
@@ -148,7 +148,7 @@ export function apply(ctx: Context, config: Config): void {
     const svc = service()
     const agent = agentOf(context)
     const binding = agent ? svc.getBinding(String(agent.id)) : undefined
-    const card = binding?.characterId ? svc.getCard(binding.characterId) : undefined
+    const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
     if (!card) return undefined
     return { card, groups: selectLore(card.book, recentText(agent)), userName: svc.settings.get().userName }
   }
@@ -347,6 +347,19 @@ function registerForgeTools(ctx: Context): void {
       creator_notes: { type: 'string', description: 'Hashtag-style notes, e.g. "#奇幻 #校园"' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Topic tags' },
       avatar_image_id: { type: 'string', description: 'Image id from a previous generate_image call to use as the portrait' },
+      regex_scripts: {
+        type: 'array',
+        description: 'Display-coloring regex rules applied to the character\'s replies',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            name: { type: 'string', required: true, description: 'Short rule label' },
+            find: { type: 'string', required: true, description: 'JS regex pattern; may use ONE capture group for the colored part' },
+            replace: { type: 'string', required: true, description: 'Color carrier, e.g. <span style="color:#e5779a">$1</span> — only the color is applied' },
+          },
+        },
+      },
       book: {
         type: 'array',
         description: 'Lorebook entries',
@@ -381,12 +394,24 @@ function registerForgeTools(ctx: Context): void {
       presentationMeta: (_args, value) => ({ ...value }),
     },
     isConcurrencySafe: () => false,
-    async execute(args) {
+    async execute(args, exec) {
       const svc = ctx.roleplay
-      const existing = args.card_id ? svc.getCard(args.card_id) : undefined
+      const agentId = exec.agent ? String(exec.agent.id) : undefined
+      const wsPath = agentId ? svc.getBinding(agentId)?.workspacePath : undefined
+      const existing = args.card_id ? svc.getCard(args.card_id, wsPath) : undefined
       if (args.card_id && !existing) throw new Error(`卡片 ${args.card_id} 不存在`)
       const nextName = args.name ?? existing?.name
       if (!nextName) throw new Error('新建卡片必须提供 name')
+      const regexScripts = args.regex_scripts?.map(script => ({
+        name: script.name,
+        find: script.find,
+        replace: script.replace,
+        flags: 'g',
+        enabled: true,
+        markdownOnly: true,
+        promptOnly: false,
+        placement: [2],
+      }))
       const book = args.book?.map((entry, index) => ({
         id: `lore-${index}`,
         title: entry.title,
@@ -407,10 +432,12 @@ function registerForgeTools(ctx: Context): void {
         ...(args.example_dialogs !== undefined ? { exampleDialogs: args.example_dialogs } : {}),
         ...(args.creator_notes !== undefined ? { creatorNotes: args.creator_notes } : {}),
         ...(args.tags !== undefined ? { tags: args.tags } : {}),
+        ...(regexScripts !== undefined ? { regexScripts } : {}),
         ...(book !== undefined ? { book } : {}),
-      })
-      if (args.avatar_image_id) card = await svc.setAvatarFromImage(card.id, args.avatar_image_id)
-      const avatarUrl = svc.avatarUrl(card)
+      }, { store: svc.settings.get().cardStore, wsPath })
+      if (args.avatar_image_id) card = await svc.setAvatarFromImage(card.id, args.avatar_image_id, wsPath)
+      const scope = svc.cardScope(card.id, wsPath)
+      const avatarUrl = svc.avatarUrl(card, scope, wsPath)
       return { card_id: card.id, name: card.name, ...(avatarUrl ? { avatar_url: avatarUrl } : {}) }
     },
   }))
@@ -437,8 +464,10 @@ function registerForgeTools(ctx: Context): void {
         text: value.length === 0 ? '本地还没有角色卡。' : value.map(card => `- ${card.name} (${card.id})`).join('\n'),
       }],
     },
-    async execute() {
-      return ctx.roleplay.listCards().map(card => ({ id: card.id, name: card.name, tags: card.tags }))
+    async execute(_args, exec) {
+      const agentId = exec.agent ? String(exec.agent.id) : undefined
+      const wsPath = agentId ? ctx.roleplay.getBinding(agentId)?.workspacePath : undefined
+      return ctx.roleplay.listCards(wsPath).map(card => ({ id: card.id, name: card.name, tags: card.tags }))
     },
   }))
 
@@ -452,8 +481,10 @@ function registerForgeTools(ctx: Context): void {
       schema: { type: 'json' },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
     },
-    async execute(args) {
-      const card = ctx.roleplay.getCard(args.card_id)
+    async execute(args, exec) {
+      const agentId = exec.agent ? String(exec.agent.id) : undefined
+      const wsPath = agentId ? ctx.roleplay.getBinding(agentId)?.workspacePath : undefined
+      const card = ctx.roleplay.getCard(args.card_id, wsPath)
       if (!card) throw new Error(`卡片 ${args.card_id} 不存在`)
       return card as unknown as import('@deepseek-ai/dsh-tools').JsonValue
     },

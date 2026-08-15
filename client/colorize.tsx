@@ -33,7 +33,17 @@ export interface CardColorRule {
   group: number
 }
 
-const COLOR_RE = /color\s*:\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|[a-zA-Z]+)/
+// Matches `color: x` and `color="x"` (font tags), but not `background-color:`.
+const COLOR_RE = /(?<![a-zA-Z-])color\s*[:=]\s*['"]?(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|[a-zA-Z]+)/
+/** CSS color keywords that carry no usable hue. */
+const NON_COLORS = new Set(['inherit', 'initial', 'unset', 'revert', 'transparent', 'currentcolor', 'none', 'var'])
+/**
+ * Wrapper-script detector probe: layout scripts wrap the ENTIRE message
+ * (e.g. `^([\s\S]+)$` panel builders) and would tint all text with one color;
+ * a rule that swallows this whole mixed sample is one of those, not a
+ * fragment-level coloring rule.
+ */
+const WRAPPER_PROBE = '第一段叙述文字。\n『对白』（心声）与其它关键词。'
 
 /**
  * Compile a card's regex scripts down to the display-coloring subset this
@@ -49,6 +59,7 @@ export function compileCardRules(scripts: RegexScriptValue[]): CardColorRule[] {
     const colorMatch = COLOR_RE.exec(script.replace)
     if (!colorMatch) continue
     const color = colorMatch[1]!.replace(/[{};]/g, '')
+    if (NON_COLORS.has(color.toLowerCase())) continue
 
     let pattern = script.find
     let flags = script.flags || 'g'
@@ -72,7 +83,12 @@ export function compileCardRules(scripts: RegexScriptValue[]): CardColorRule[] {
     const group = /\$1/.test(script.replace) && /\((?!\?)/.test(pattern) ? 1 : 0
     if (group > 0 && !flags.includes('d')) flags += 'd'
     try {
-      rules.push({ regex: new RegExp(pattern, flags), color, group })
+      const regex = new RegExp(pattern, flags)
+      const probeMatch = regex.exec(WRAPPER_PROBE)
+      regex.lastIndex = 0
+      // Whole-message wrapper scripts are layout, not coloring — skip them.
+      if (probeMatch && probeMatch[0] === WRAPPER_PROBE) continue
+      rules.push({ regex, color, group })
     } catch {
       // invalid pattern/flags: the script is ignored rather than fatal
     }
@@ -134,6 +150,32 @@ export function colorizeProse(text: string, rules: readonly CardColorRule[] = []
   }
   if (cursor < text.length) nodes.push(text.slice(cursor))
   return nodes
+}
+
+/** Normalize any CSS color to #rrggbb for `<input type="color">` (canvas trick). */
+export function toHexColor(color: string): string | undefined {
+  try {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return undefined
+    ctx.fillStyle = '#000'
+    ctx.fillStyle = color
+    const normalized = ctx.fillStyle
+    return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Rewrite the (first) color value inside a replacement template; a template
+ * without one gets wrapped in a fresh color-carrying span.
+ */
+export function withColorValue(template: string, hex: string): string {
+  const match = COLOR_RE.exec(template)
+  if (!match) return `<span style="color:${hex}">${template || '$1'}</span>`
+  const start = match.index + match[0].length - match[1]!.length
+  return `${template.slice(0, start)}${hex}${template.slice(start + match[1]!.length)}`
 }
 
 interface HighlightLike {

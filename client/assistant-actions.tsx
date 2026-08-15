@@ -7,7 +7,7 @@
 import { useState, type ReactNode } from 'react'
 import { IconEnhanceOutline16, IconRefreshOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api } from './api.ts'
-import { bumpImageRevs, rewindAndResend } from './runtime.ts'
+import { bumpImageRevs, rewindAndResend, workspaceOfSession } from './runtime.ts'
 import { useT } from './i18n.ts'
 
 interface ChatNodeLike {
@@ -118,7 +118,7 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
             disabled={busy}
             onClick={() => {
               setBusy(true)
-              api.regenerateImages(context.imageIds)
+              api.regenerateImages(context.imageIds, props.sessionId ? workspaceOfSession(props.sessionId)?.path : undefined)
                 .then(result => bumpImageRevs(result.regenerated))
                 .catch(() => {})
                 .finally(() => setBusy(false))

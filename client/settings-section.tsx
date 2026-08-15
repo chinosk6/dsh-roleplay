@@ -1,8 +1,9 @@
-/** The「角色扮演」settings page: user identity, image backend, gallery and card library + sub-pages. */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, formatBytes, type CardSummary, type ErpPoints, type GalleryUsage, type RoleplaySettingsValue } from './api.ts'
+/** The「角色扮演」settings page: user identity, image backend, storage, gallery and card library + sub-pages. */
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { api, formatBytes, type CardSummary, type ErpPoints, type GalleryUsage, type RoleplaySettingsValue, type StoreScope } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
+import { recentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
 import { useT, tf } from './i18n.ts'
 
 type Draft = RoleplaySettingsValue
@@ -27,6 +28,8 @@ export function RoleplaySettingsSection(): ReactNode {
   /** Whether the image-gallery sub-page replaces the section body. */
   const [gallery, setGallery] = useState(false)
   const saveTimer = useRef<number | undefined>(undefined)
+  /** The "current" workspace (most recently active) — the workspace-store target. */
+  const ws = useSyncExternalStore(subscribeWorkspaces, recentWorkspace)
 
   useEffect(() => {
     api.settings()
@@ -53,10 +56,10 @@ export function RoleplaySettingsSection(): ReactNode {
 
   // ── sub-pages ──
   if (editing) {
-    return <CardEditor cardId={editing} onClose={() => setEditing(null)} />
+    return <CardEditor cardId={editing} onClose={() => setEditing(null)} ws={ws?.path} />
   }
   if (gallery) {
-    return <ImageGalleryPage onClose={() => setGallery(false)} />
+    return <ImageGalleryPage onClose={() => setGallery(false)} ws={ws?.path} />
   }
 
   if (error && !draft) return <div className="rp-settings"><span className="rp-error">{error}</span></div>
@@ -220,9 +223,101 @@ export function RoleplaySettingsSection(): ReactNode {
         </div>
       </div>
 
-      <GalleryEntry onOpen={() => setGallery(true)} />
+      <StorageBlock draft={draft} patch={patch} ws={ws} />
 
-      <CardManager onEdit={setEditing} />
+      <GalleryEntry onOpen={() => setGallery(true)} ws={ws?.path} />
+
+      <CardManager onEdit={setEditing} ws={ws} />
+    </div>
+  )
+}
+
+/**
+ * Storage placement: which store new images/cards land in, the current
+ * workspace, and the per-workspace data subfolder. Changing the subfolder
+ * offers to move the current workspace's existing data along.
+ */
+function StorageBlock({ draft, patch, ws }: {
+  draft: Draft
+  patch: (partial: Partial<Draft>) => void
+  ws: WorkspaceInfo | undefined
+}): ReactNode {
+  const t = useT()
+  const [folder, setFolder] = useState(draft.workspaceSubfolder)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  useEffect(() => setFolder(draft.workspaceSubfolder), [draft.workspaceSubfolder])
+
+  const applyFolder = useCallback(async () => {
+    const next = folder.trim()
+    const prev = draft.workspaceSubfolder
+    if (next === prev) return
+    if (next === '' || /[\\/]/.test(next) || next === '.' || next === '..') {
+      setNote(t('rp.storage.folderInvalid'))
+      setFolder(prev)
+      return
+    }
+    setBusy(true)
+    setNote('')
+    try {
+      // Saved directly (not via the debounced patch): a migration right after
+      // must already see the new subfolder setting host-side.
+      await api.updateSettings({ workspaceSubfolder: next })
+      patch({ workspaceSubfolder: next })
+      if (ws) {
+        const probe = await api.probeWorkspaceFolder(ws.path, prev).catch(() => ({ exists: false }))
+        if (probe.exists && window.confirm(tf('rp.storage.migrateConfirm', { from: prev, to: next }))) {
+          await api.migrateWorkspaceFolder(ws.path, prev, next)
+          setNote(t('rp.storage.migrated'))
+        }
+      }
+    } catch (err) {
+      setNote(String(err instanceof Error ? err.message : err))
+    } finally {
+      setBusy(false)
+    }
+  }, [folder, draft.workspaceSubfolder, ws, patch, t])
+
+  return (
+    <div>
+      <h4>{t('rp.storage.heading')}</h4>
+      <div className="rp-field">
+        <label>{t('rp.storage.currentWs')}</label>
+        <span className="rp-note">
+          {ws ? `${ws.title} · ${ws.path}` : t('rp.storage.noWs')}
+        </span>
+      </div>
+      <div className="rp-inline">
+        <Field label={t('rp.storage.imageStore')}>
+          <select value={draft.imageStore} onChange={event => patch({ imageStore: event.target.value as StoreScope })}>
+            <option value="workspace">{t('rp.storage.workspace')}</option>
+            <option value="global">{t('rp.storage.global')}</option>
+          </select>
+        </Field>
+        <Field label={t('rp.storage.cardStore')}>
+          <select value={draft.cardStore} onChange={event => patch({ cardStore: event.target.value as StoreScope })}>
+            <option value="workspace">{t('rp.storage.workspace')}</option>
+            <option value="global">{t('rp.storage.global')}</option>
+          </select>
+        </Field>
+        <Field label={t('rp.storage.subfolder')}>
+          <div className="rp-keyrow">
+            <input
+              value={folder}
+              disabled={busy}
+              onChange={event => setFolder(event.target.value)}
+              onKeyDown={event => { if (event.key === 'Enter') void applyFolder() }}
+            />
+            <button className="rp-btn" disabled={busy || folder.trim() === draft.workspaceSubfolder} onClick={() => void applyFolder()}>
+              {t('rp.storage.apply')}
+            </button>
+          </div>
+        </Field>
+      </div>
+      <span className="rp-note">
+        {ws ? `${t('rp.storage.pathHint')}：${ws.path}${ws.path.includes('\\') ? '\\' : '/'}${draft.workspaceSubfolder}` : t('rp.storage.hint')}
+        {note ? ` · ${note}` : ''}
+      </span>
     </div>
   )
 }
@@ -310,18 +405,18 @@ function ErpSexConfig({ apiKey, model, onKeyChange, onModelChange }: {
 }
 
 /** Gallery entry row: usage summary outside, the full page one click away. */
-function GalleryEntry({ onOpen }: { onOpen: () => void }): ReactNode {
+function GalleryEntry({ onOpen, ws }: { onOpen: () => void; ws?: string | undefined }): ReactNode {
   const t = useT()
   const [usage, setUsage] = useState<GalleryUsage | null>(null)
   const [count, setCount] = useState<number | null>(null)
   useEffect(() => {
-    api.images()
+    api.images(ws)
       .then(result => {
         setUsage(result.usage)
         setCount(result.images.length)
       })
       .catch(() => {})
-  }, [])
+  }, [ws])
   return (
     <div>
       <h4>{t('rp.gallery.title')}</h4>
@@ -330,7 +425,9 @@ function GalleryEntry({ onOpen }: { onOpen: () => void }): ReactNode {
           <div className="rp-name">{t('rp.gallery.title')}{count !== null ? ` · ${count}` : ''}</div>
           <div className="rp-tags">
             {usage
-              ? `${tf('rp.gallery.used', { used: formatBytes(usage.usedBytes) })} · ${tf('rp.gallery.free', { free: formatBytes(usage.freeBytes) })}`
+              ? usage.wsFreeBytes !== undefined
+                ? `${tf('rp.gallery.used', { used: formatBytes(usage.usedBytes) })} · ${tf('rp.gallery.freeGlobal', { free: formatBytes(usage.freeBytes) })} · ${tf('rp.gallery.freeWs', { free: formatBytes(usage.wsFreeBytes) })}`
+                : `${tf('rp.gallery.used', { used: formatBytes(usage.usedBytes) })} · ${tf('rp.gallery.free', { free: formatBytes(usage.freeBytes) })}`
               : t('rp.gallery.loading')}
           </div>
         </div>
@@ -342,16 +439,17 @@ function GalleryEntry({ onOpen }: { onOpen: () => void }): ReactNode {
   )
 }
 
-function CardManager({ onEdit }: { onEdit: (cardId: string) => void }): ReactNode {
+function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: WorkspaceInfo | undefined }): ReactNode {
   const t = useT()
   const [cards, setCards] = useState<CardSummary[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const wsPath = ws?.path
 
   const reload = useCallback(() => {
-    api.cards().then(result => setCards(result.cards)).catch(err => setError(String(err instanceof Error ? err.message : err)))
-  }, [])
+    api.cards(wsPath).then(result => setCards(result.cards)).catch(err => setError(String(err instanceof Error ? err.message : err)))
+  }, [wsPath])
   useEffect(reload, [reload])
 
   const importFiles = useCallback(async (files: FileList | null) => {
@@ -360,7 +458,7 @@ function CardManager({ onEdit }: { onEdit: (cardId: string) => void }): ReactNod
     setError('')
     try {
       for (const file of Array.from(files)) {
-        await api.importCard(await file.arrayBuffer())
+        await api.importCard(await file.arrayBuffer(), wsPath)
       }
       reload()
     } catch (err) {
@@ -369,7 +467,13 @@ function CardManager({ onEdit }: { onEdit: (cardId: string) => void }): ReactNod
       setBusy(false)
       if (fileRef.current) fileRef.current.value = ''
     }
-  }, [reload])
+  }, [reload, wsPath])
+
+  const move = useCallback((card: CardSummary) => {
+    void api.moveCard(card.id, card.scope === 'global' ? 'workspace' : 'global', wsPath)
+      .then(reload)
+      .catch(err => setError(String(err instanceof Error ? err.message : err)))
+  }, [reload, wsPath])
 
   return (
     <div>
@@ -396,12 +500,24 @@ function CardManager({ onEdit }: { onEdit: (cardId: string) => void }): ReactNod
       ) : (
         <div>
           {cards.map(card => (
-            <div key={card.id} className="rp-cardrow">
+            <div key={`${card.scope}-${card.id}`} className="rp-cardrow">
               {card.avatarUrl
                 ? <img className="rp-avatar" src={card.avatarUrl} alt={card.name} />
                 : <div className="rp-avatar-fallback">{card.name.slice(0, 1)}</div>}
               <div className="rp-grow">
-                <div className="rp-name">{card.favorite ? '★ ' : ''}{card.name}</div>
+                <div className="rp-name">
+                  <button
+                    className="rp-star"
+                    title={card.favorite ? t('rp.cards.unfavorite') : t('rp.cards.favorite')}
+                    onClick={() => void api.updateCard(card.id, { favorite: !card.favorite }, wsPath).then(reload).catch(() => {})}
+                  >
+                    {card.favorite ? '★' : '☆'}
+                  </button>
+                  <span className={`rp-scope-tag rp-scope-${card.scope}`}>
+                    {card.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
+                  </span>
+                  {card.name}
+                </div>
                 <div className="rp-tags">
                   {[card.creatorNotes || card.description, `${card.bookEntries}${t('rp.cards.lore')}`].filter(Boolean).join(' · ')}
                 </div>
@@ -410,18 +526,19 @@ function CardManager({ onEdit }: { onEdit: (cardId: string) => void }): ReactNod
                 <button className="rp-btn rp-btn-primary" onClick={() => onEdit(card.id)}>{t('rp.cards.edit')}</button>
                 <button
                   className="rp-btn"
-                  title={card.favorite ? t('rp.cards.unfavorite') : t('rp.cards.favorite')}
-                  onClick={() => void api.updateCard(card.id, { favorite: !card.favorite }).then(reload).catch(() => {})}
+                  disabled={card.scope === 'global' && !ws}
+                  title={card.scope === 'global' ? t('rp.cards.toWorkspace') : t('rp.cards.toGlobal')}
+                  onClick={() => move(card)}
                 >
-                  {card.favorite ? '★' : '☆'}
+                  {card.scope === 'global' ? t('rp.cards.toWorkspace') : t('rp.cards.toGlobal')}
                 </button>
-                <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportPngUrl(card.id)} download>PNG</a>
-                <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportJsonUrl(card.id)} download>JSON</a>
+                <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportPngUrl(card.id, wsPath)} download>PNG</a>
+                <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportJsonUrl(card.id, wsPath)} download>JSON</a>
                 <button
                   className="rp-btn rp-btn-danger"
                   onClick={() => {
                     if (window.confirm(tf('rp.cards.deleteConfirm', { name: card.name }))) {
-                      void api.deleteCard(card.id).then(reload).catch(err => setError(String(err)))
+                      void api.deleteCard(card.id, wsPath).then(reload).catch(err => setError(String(err)))
                     }
                   }}
                 >

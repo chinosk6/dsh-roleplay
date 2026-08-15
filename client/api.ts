@@ -1,5 +1,8 @@
 /** Typed fetch helpers over the plugin's same-origin HTTP surface. */
 
+/** Which store an item lives in. */
+export type StoreScope = 'global' | 'workspace'
+
 export interface CardSummary {
   id: string
   name: string
@@ -10,6 +13,7 @@ export interface CardSummary {
   updatedAt: number
   avatarUrl: string | null
   bookEntries: number
+  scope: StoreScope
 }
 
 export type ReferenceMode = 'none' | 'avatar' | 'custom'
@@ -35,6 +39,7 @@ export interface SessionState {
     imageCount?: number
     referenceMode?: ReferenceMode
     pendingInstruction?: string
+    workspacePath?: string
   } | null
   card: { id: string; name: string; firstMessage: string; avatarUrl: string | null; regexScripts: RegexScriptValue[] } | null
   autoImageDefault: boolean
@@ -71,6 +76,7 @@ export interface CharacterCardDetail {
     creatorNotes: string
     tags: string[]
     book: LoreEntryValue[]
+    regexScripts: RegexScriptValue[]
     avatar?: string
     favorite: boolean
     createdAt: number
@@ -85,6 +91,9 @@ export type ImageSizeValue = 'portrait' | 'landscape' | 'square' | 'ratio43' | '
 export interface RoleplaySettingsValue {
   userName: string
   userPersona: string
+  workspaceSubfolder: string
+  imageStore: StoreScope
+  cardStore: StoreScope
   imageProvider: 'none' | 'novelai' | 'sdwebui' | 'url' | 'erpsex'
   novelaiApiUrl: string
   novelaiApiKey: string
@@ -123,6 +132,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body
 }
 
+/** Append the current-workspace query (store-aware routes). */
+function withWs(path: string, ws?: string): string {
+  if (!ws) return path
+  return `${path}${path.includes('?') ? '&' : '?'}ws=${encodeURIComponent(ws)}`
+}
+
 export const api = {
   settings: () => request<{ value: RoleplaySettingsValue; imageProvider: { provider: string; available: boolean } }>('/settings'),
   updateSettings: (patch: Partial<RoleplaySettingsValue>) =>
@@ -131,25 +146,31 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     }),
-  cards: () => request<{ cards: CardSummary[] }>('/cards'),
-  deleteCard: (id: string) => request<{ deleted: boolean }>(`/cards/${id}`, { method: 'DELETE' }),
-  updateCard: (id: string, patch: object) =>
-    request<{ card: unknown }>(`/cards/${id}`, {
+  cards: (ws?: string) => request<{ cards: CardSummary[] }>(withWs('/cards', ws)),
+  deleteCard: (id: string, ws?: string) => request<{ deleted: boolean }>(withWs(`/cards/${id}`, ws), { method: 'DELETE' }),
+  updateCard: (id: string, patch: object, ws?: string) =>
+    request<{ card: unknown }>(withWs(`/cards/${id}`, ws), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     }),
-  getCard: (id: string) => request<CharacterCardDetail>(`/cards/${id}`),
-  updateCardAvatar: (id: string, bytes: ArrayBuffer) =>
-    request<{ card: unknown; avatarUrl: string | null }>(`/cards/${id}/avatar`, {
+  getCard: (id: string, ws?: string) => request<CharacterCardDetail>(withWs(`/cards/${id}`, ws)),
+  moveCard: (id: string, to: StoreScope, ws?: string) =>
+    request<{ card: unknown; scope: StoreScope }>(withWs(`/cards/${id}/move`, ws), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to }),
+    }),
+  updateCardAvatar: (id: string, bytes: ArrayBuffer, ws?: string) =>
+    request<{ card: unknown; avatarUrl: string | null }>(withWs(`/cards/${id}/avatar`, ws), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: bytes,
     }),
-  deleteCardAvatar: (id: string) =>
-    request<{ card: unknown; avatarUrl: null }>(`/cards/${id}/avatar`, { method: 'DELETE' }),
-  importCard: (bytes: ArrayBuffer) =>
-    request<{ card: { id: string; name: string } }>('/cards/import', {
+  deleteCardAvatar: (id: string, ws?: string) =>
+    request<{ card: unknown; avatarUrl: null }>(withWs(`/cards/${id}/avatar`, ws), { method: 'DELETE' }),
+  importCard: (bytes: ArrayBuffer, ws?: string) =>
+    request<{ card: { id: string; name: string }; scope: StoreScope }>(withWs('/cards/import', ws), {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: bytes,
@@ -166,6 +187,8 @@ export const api = {
     referenceMode?: ReferenceMode | null
     /** One-shot stage direction sent with the next message; null clears it. */
     pendingInstruction?: string | null
+    /** The session's workspace path (recorded by the dock); null forgets it. */
+    workspacePath?: string | null
   }) =>
     request<{ binding: unknown }>(`/session/${encodeURIComponent(sessionId)}`, {
       method: 'PUT',
@@ -181,8 +204,8 @@ export const api = {
   deleteSessionReference: (sessionId: string) =>
     request<{ ok: boolean }>(`/session/${encodeURIComponent(sessionId)}/reference`, { method: 'DELETE' }),
   sessionReferenceUrl: (sessionId: string) => `${BASE}/session/${encodeURIComponent(sessionId)}/reference`,
-  exportJsonUrl: (id: string) => `${BASE}/cards/${id}/export.json`,
-  exportPngUrl: (id: string) => `${BASE}/cards/${id}/export.png`,
+  exportJsonUrl: (id: string, ws?: string) => `${BASE}${withWs(`/cards/${id}/export.json`, ws)}`,
+  exportPngUrl: (id: string, ws?: string) => `${BASE}${withWs(`/cards/${id}/export.png`, ws)}`,
   uploadReference: (bytes: ArrayBuffer) =>
     request<{ ok: boolean }>('/settings/reference', {
       method: 'PUT',
@@ -191,26 +214,40 @@ export const api = {
     }),
   referenceUrl: () => `${BASE}/settings/reference`,
   erpPoints: () => request<ErpPoints>('/erp/points'),
-  images: () => request<GalleryResponse>('/images'),
-  starImage: (id: string, starred: boolean) =>
-    request<{ ok: boolean }>('/images/star', {
+  images: (ws?: string) => request<GalleryResponse>(withWs('/images', ws)),
+  starImage: (id: string, starred: boolean, ws?: string) =>
+    request<{ ok: boolean }>(withWs('/images/star', ws), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, starred }),
     }),
-  deleteImages: (ids: string[]) =>
-    request<{ deleted: number }>('/images/delete', {
+  deleteImages: (ids: string[], ws?: string) =>
+    request<{ deleted: number }>(withWs('/images/delete', ws), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
     }),
-  imageStates: (ids: string[]) =>
-    request<{ states: Record<string, ImageGenState> }>(`/images/state?ids=${ids.map(encodeURIComponent).join(',')}`),
-  regenerateImages: (ids: string[]) =>
-    request<{ regenerated: string[] }>('/images/regenerate', {
+  moveImages: (ids: string[], to: StoreScope, ws?: string) =>
+    request<{ moved: number }>(withWs('/images/move', ws), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, to }),
+    }),
+  imageStates: (ids: string[], ws?: string) =>
+    request<{ states: Record<string, ImageGenState> }>(withWs(`/images/state?ids=${ids.map(encodeURIComponent).join(',')}`, ws)),
+  regenerateImages: (ids: string[], ws?: string) =>
+    request<{ regenerated: string[] }>(withWs('/images/regenerate', ws), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
+    }),
+  probeWorkspaceFolder: (ws: string, sub: string) =>
+    request<{ exists: boolean }>(withWs(`/workspace/probe?sub=${encodeURIComponent(sub)}`, ws)),
+  migrateWorkspaceFolder: (ws: string, from: string, to: string) =>
+    request<{ moved: boolean }>(withWs('/workspace/migrate', ws), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to }),
     }),
 }
 
@@ -229,12 +266,16 @@ export interface GalleryImage {
   starred: boolean
   size: number
   url: string
+  scope: StoreScope
 }
 
 export interface GalleryUsage {
   usedBytes: number
   freeBytes: number
   totalBytes: number
+  /** Present only when the workspace store sits on a different partition. */
+  wsFreeBytes?: number
+  wsTotalBytes?: number
 }
 
 export interface GalleryResponse {

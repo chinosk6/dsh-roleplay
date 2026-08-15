@@ -4,7 +4,8 @@
  *  - the save_character_card tool view (interactive result card in forge chats)
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, type CharacterCardDetail, type LoreEntryValue } from './api.ts'
+import { api, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue } from './api.ts'
+import { compileCardRules, toHexColor, withColorValue } from './colorize.tsx'
 import { useT, tf } from './i18n.ts'
 
 const LORE_POSITIONS = ['system_top', 'before_char', 'after_char', 'user_top', 'assistant_top', 'at_depth'] as const
@@ -21,12 +22,14 @@ function Field({ label, children }: { label: string; children: ReactNode }): Rea
   )
 }
 
-export function CardEditor({ cardId, onClose, onDeleted, onSaved }: {
+export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
   cardId: string
   /** Rendered when the editor lives inside the settings section (back button). */
   onClose?: () => void
   onDeleted?: () => void
   onSaved?: () => void
+  /** Current workspace path, for cards living in the workspace store. */
+  ws?: string | undefined
 }): ReactNode {
   const t = useT()
   const [card, setCard] = useState<CharacterCardDetail['card'] | null>(null)
@@ -38,7 +41,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved }: {
 
   const reload = useCallback(() => {
     setNotice('')
-    api.getCard(cardId)
+    api.getCard(cardId, ws)
       .then(result => {
         setCard(result.card)
         setAvatarUrl(result.avatarUrl)
@@ -58,7 +61,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved }: {
     setError('')
     setNotice('')
     try {
-      await api.updateCard(cardId, card)
+      await api.updateCard(cardId, card, ws)
       setNotice(t('rp.editor.saved'))
       onSaved?.()
     } catch (err) {
@@ -74,7 +77,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved }: {
     setBusy(true)
     setError('')
     try {
-      const result = await api.updateCardAvatar(cardId, await file.arrayBuffer())
+      const result = await api.updateCardAvatar(cardId, await file.arrayBuffer(), ws)
       setAvatarUrl(result.avatarUrl)
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err))
@@ -88,7 +91,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved }: {
     setBusy(true)
     setError('')
     try {
-      await api.deleteCardAvatar(cardId)
+      await api.deleteCardAvatar(cardId, ws)
       setAvatarUrl(null)
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err))
@@ -101,7 +104,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved }: {
     if (!card || !window.confirm(tf('rp.cards.deleteConfirm', { name: card.name }))) return
     setBusy(true)
     try {
-      await api.deleteCard(cardId)
+      await api.deleteCard(cardId, ws)
       onDeleted?.()
       onClose?.()
     } catch (err) {
@@ -119,6 +122,9 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved }: {
     )
   }
   if (!card) return <div className="rp-settings"><span className="rp-note">{t('rp.settings.loading')}</span></div>
+
+  // Defensive: a host predating the field would omit it from the payload.
+  const scripts = card.regexScripts ?? []
 
   const field = (key: TextKey, label: string, rows = 2) => {
     const value = card[key]
@@ -221,9 +227,74 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved }: {
         {t('rp.editor.book.add')}
       </button>
 
+      <h4>{t('rp.editor.regex')}</h4>
+      <span className="rp-note">{t('rp.editor.regex.hint')}</span>
+      {scripts.length === 0 ? <span className="rp-note">—</span> : null}
+      {scripts.map((script, index) => {
+        const patchScript = (partial: Partial<RegexScriptValue>) => {
+          patch({ regexScripts: scripts.map((item, itemIndex) => itemIndex === index ? { ...item, ...partial } : item) })
+        }
+        // Live effectiveness preview: the same compiler the chat uses — a
+        // swatch shows the extracted color, otherwise the rule won't apply.
+        const rule = compileCardRules([script])[0]
+        return (
+          <div key={index} className="rp-loreentry">
+            <div className="rp-loreentry-head">
+              <span className="rp-muted">#{index + 1}</span>
+              {rule
+                ? (
+                    <label className="rp-regex-swatch" style={{ background: rule.color }} title={rule.color}>
+                      {/* Click-to-pick: the native color input hides inside the swatch. */}
+                      <input
+                        type="color"
+                        value={toHexColor(rule.color) ?? '#e5779a'}
+                        onChange={event => patchScript({ replace: withColorValue(script.replace, event.target.value) })}
+                      />
+                    </label>
+                  )
+                : <span className="rp-note">{t('rp.editor.regex.inactive')}</span>}
+              <span className="rp-spacer" />
+              <button className="rp-btn" onClick={() => patch({ regexScripts: scripts.filter((_, itemIndex) => itemIndex !== index) })}>{t('rp.editor.book.remove')}</button>
+            </div>
+            <div className="rp-inline">
+              <Field label={t('rp.editor.regex.name')}>
+                <input value={script.name} onChange={event => patchScript({ name: event.target.value })} />
+              </Field>
+              <div className="rp-field">
+                <label>{t('rp.editor.regex.enabled')}</label>
+                <input type="checkbox" checked={script.enabled} onChange={event => patchScript({ enabled: event.target.checked })} />
+              </div>
+            </div>
+            <Field label={t('rp.editor.regex.find')}>
+              <input value={script.find} onChange={event => patchScript({ find: event.target.value })} spellCheck={false} />
+            </Field>
+            <Field label={t('rp.editor.regex.replace')}>
+              <textarea rows={2} value={script.replace} onChange={event => patchScript({ replace: event.target.value })} spellCheck={false} />
+            </Field>
+          </div>
+        )
+      })}
+      <button
+        className="rp-btn"
+        onClick={() => patch({
+          regexScripts: [...scripts, {
+            name: '',
+            find: '',
+            replace: '<span style="color:#e5779a">$1</span>',
+            flags: 'g',
+            enabled: true,
+            markdownOnly: true,
+            promptOnly: false,
+            placement: [2],
+          }],
+        })}
+      >
+        {t('rp.editor.regex.add')}
+      </button>
+
       <div className="rp-actions" style={{ marginTop: 12 }}>
-        <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportPngUrl(cardId)} download>{t('rp.editor.exportPng')}</a>
-        <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportJsonUrl(cardId)} download>{t('rp.editor.exportJson')}</a>
+        <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportPngUrl(cardId, ws)} download>{t('rp.editor.exportPng')}</a>
+        <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportJsonUrl(cardId, ws)} download>{t('rp.editor.exportJson')}</a>
         <span className="rp-spacer" />
         <button className="rp-btn rp-btn-danger" disabled={busy} onClick={() => void removeCard()}>{t('rp.editor.delete')}</button>
       </div>

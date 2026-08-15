@@ -12,8 +12,21 @@ interface SessionsFace {
   select(sessionId: string): void
 }
 
+interface WorkspaceRow {
+  workspaceId: string
+  /** Canonical directory path of the workspace. */
+  path: string
+  title: string
+  sessionIds: readonly string[]
+}
+
 interface WorkspacesFace {
   archiveSession(sessionId: string): Promise<void>
+  /** The workspaces snapshot feed (present on the real ctx.workspaces). */
+  list?: {
+    getSnapshot(): { items: readonly WorkspaceRow[]; recentWorkspaceId?: string | undefined }
+    subscribe(fn: () => void): () => void
+  }
 }
 
 interface SlotsFace {
@@ -28,6 +41,48 @@ export function wireRuntime(services: { sessions: SessionsFace; workspaces: Work
   sessionsFace = services.sessions
   workspacesFace = services.workspaces
   slotsFace = services.slots
+}
+
+// ── workspace access ─────────────────────────────────────────────────────────
+
+export interface WorkspaceInfo {
+  workspaceId: string
+  path: string
+  title: string
+}
+
+function toInfo(row: WorkspaceRow | undefined): WorkspaceInfo | undefined {
+  return row ? { workspaceId: row.workspaceId, path: row.path, title: row.title } : undefined
+}
+
+/** The workspace a session is accounted under. */
+export function workspaceOfSession(sessionId: string): WorkspaceInfo | undefined {
+  const state = workspacesFace?.list?.getSnapshot()
+  return toInfo(state?.items.find(item => item.sessionIds.includes(sessionId)))
+}
+
+/**
+ * The most recently active workspace — the "current" one outside any session
+ * context. Returns a REFERENCE-STABLE object while the workspace is unchanged
+ * (useSyncExternalStore snapshot contract).
+ */
+let lastRecent: WorkspaceInfo | undefined
+export function recentWorkspace(): WorkspaceInfo | undefined {
+  const state = workspacesFace?.list?.getSnapshot()
+  const row = state
+    ? (state.items.find(item => item.workspaceId === state.recentWorkspaceId) ?? state.items[0])
+    : undefined
+  if (!row) {
+    lastRecent = undefined
+  } else if (!lastRecent || lastRecent.workspaceId !== row.workspaceId || lastRecent.path !== row.path || lastRecent.title !== row.title) {
+    lastRecent = { workspaceId: row.workspaceId, path: row.path, title: row.title }
+  }
+  return lastRecent
+}
+
+/** Subscribe to workspace list changes (no-op unsubscriber without the feed). */
+export function subscribeWorkspaces(fn: () => void): () => void {
+  return workspacesFace?.list?.subscribe(fn) ?? (() => {})
 }
 
 /** The native (non-plugin) component registered for one keyed chat-node cell. */
@@ -71,6 +126,7 @@ export async function rewindAndResend(sessionId: string, prevTurnEndSeq: number,
       ...(binding.choiceMode !== undefined ? { choiceMode: binding.choiceMode } : {}),
       ...(binding.imageCount !== undefined ? { imageCount: binding.imageCount } : {}),
       ...(binding.referenceMode !== undefined ? { referenceMode: binding.referenceMode } : {}),
+      ...(binding.workspacePath !== undefined ? { workspacePath: binding.workspacePath } : {}),
     }).catch(() => {})
   }
   if (resendText.trim() !== '') pendingResend.set(forkedId, resendText)

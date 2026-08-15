@@ -12,15 +12,35 @@ function UsageBar({ usage }: { usage: GalleryUsage }): ReactNode {
   const t = useT()
   const total = usage.usedBytes + usage.freeBytes
   const ratio = total > 0 ? Math.min(1, usage.usedBytes / total) : 0
+  // The workspace disk row appears only when it is a different partition.
+  const wsSeparate = usage.wsFreeBytes !== undefined && usage.wsTotalBytes !== undefined
+  const wsRatio = wsSeparate && usage.wsTotalBytes! > 0
+    ? Math.min(1, (usage.wsTotalBytes! - usage.wsFreeBytes!) / usage.wsTotalBytes!)
+    : 0
   return (
     <div className="rp-usage">
       <div className="rp-usage-labels">
         <span>{tf('rp.gallery.used', { used: formatBytes(usage.usedBytes) })}</span>
-        <span>{tf('rp.gallery.free', { free: formatBytes(usage.freeBytes) })}</span>
+        <span>
+          {wsSeparate
+            ? tf('rp.gallery.freeGlobal', { free: formatBytes(usage.freeBytes) })
+            : tf('rp.gallery.free', { free: formatBytes(usage.freeBytes) })}
+        </span>
       </div>
       <div className="rp-usage-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 100)} aria-label={t('rp.gallery.title')}>
         <div className="rp-usage-fill" style={{ width: `${Math.max(0.5, ratio * 100)}%` }} />
       </div>
+      {wsSeparate ? (
+        <>
+          <div className="rp-usage-labels" style={{ marginTop: 6 }}>
+            <span>{t('rp.gallery.wsDisk')}</span>
+            <span>{tf('rp.gallery.freeWs', { free: formatBytes(usage.wsFreeBytes!) })}</span>
+          </div>
+          <div className="rp-usage-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(wsRatio * 100)} aria-label={t('rp.gallery.wsDisk')}>
+            <div className="rp-usage-fill" style={{ width: `${Math.max(0.5, wsRatio * 100)}%` }} />
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
@@ -44,12 +64,15 @@ function Tile({ image, selected, onToggleSelect, onToggleStar }: {
         {image.starred ? '★' : '☆'}
       </button>
       <span className={`rp-tile-check${selected ? ' rp-on' : ''}`} aria-hidden>✓</span>
+      <span className={`rp-tile-scope rp-scope-tag rp-scope-${image.scope}`}>
+        {image.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
+      </span>
       <span className="rp-tile-size">{formatBytes(image.size)}</span>
     </div>
   )
 }
 
-export function ImageGalleryPage({ onClose }: { onClose: () => void }): ReactNode {
+export function ImageGalleryPage({ onClose, ws }: { onClose: () => void; ws?: string | undefined }): ReactNode {
   const t = useT()
   const [images, setImages] = useState<GalleryImage[] | null>(null)
   const [usage, setUsage] = useState<GalleryUsage | null>(null)
@@ -58,14 +81,14 @@ export function ImageGalleryPage({ onClose }: { onClose: () => void }): ReactNod
   const [busy, setBusy] = useState(false)
 
   const reload = useCallback(() => {
-    api.images()
+    api.images(ws)
       .then(result => {
         setImages(result.images)
         setUsage(result.usage)
         setSelected(current => new Set([...current].filter(id => result.images.some(image => image.id === id))))
       })
       .catch(err => setError(String(err instanceof Error ? err.message : err)))
-  }, [])
+  }, [ws])
   useEffect(reload, [reload])
 
   const toggleSelect = useCallback((id: string) => {
@@ -78,19 +101,29 @@ export function ImageGalleryPage({ onClose }: { onClose: () => void }): ReactNod
   }, [])
 
   const toggleStar = useCallback((image: GalleryImage) => {
-    void api.starImage(image.id, !image.starred).then(reload).catch(err => setError(String(err)))
-  }, [reload])
+    void api.starImage(image.id, !image.starred, ws).then(reload).catch(err => setError(String(err)))
+  }, [reload, ws])
 
   const deleteSelected = useCallback(() => {
     const ids = [...selected]
     if (ids.length === 0) return
     if (!window.confirm(tf('rp.gallery.confirmDelete', { count: ids.length }))) return
     setBusy(true)
-    api.deleteImages(ids)
+    api.deleteImages(ids, ws)
       .then(reload)
       .catch(err => setError(String(err instanceof Error ? err.message : err)))
       .finally(() => setBusy(false))
-  }, [selected, reload])
+  }, [selected, reload, ws])
+
+  const moveSelected = useCallback((to: 'global' | 'workspace') => {
+    const ids = [...selected]
+    if (ids.length === 0) return
+    setBusy(true)
+    api.moveImages(ids, to, ws)
+      .then(reload)
+      .catch(err => setError(String(err instanceof Error ? err.message : err)))
+      .finally(() => setBusy(false))
+  }, [selected, reload, ws])
 
   const starred = images?.filter(image => image.starred) ?? []
   const rest = images?.filter(image => !image.starred) ?? []
@@ -109,6 +142,12 @@ export function ImageGalleryPage({ onClose }: { onClose: () => void }): ReactNod
               onClick={() => setSelected(current => (current.size === images.length ? new Set() : new Set(images.map(image => image.id))))}
             >
               {selected.size === images.length && images.length > 0 ? t('rp.gallery.clearSelect') : t('rp.gallery.selectAll')}
+            </button>
+            <button className="rp-btn" disabled={busy || selected.size === 0} onClick={() => moveSelected('global')}>
+              {t('rp.gallery.moveGlobal')}
+            </button>
+            <button className="rp-btn" disabled={busy || selected.size === 0 || !ws} onClick={() => moveSelected('workspace')}>
+              {t('rp.gallery.moveWorkspace')}
             </button>
             <button className="rp-btn rp-btn-danger" disabled={busy || selected.size === 0} onClick={deleteSelected}>
               {tf('rp.gallery.deleteSelected', { count: selected.size })}

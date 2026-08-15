@@ -28,6 +28,7 @@ export const CSS = `
 .rp-cardcell{cursor:pointer;display:flex;gap:8px;align-items:center;padding:8px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-module-platform);text-align:left;font-family:inherit;color:var(--dsw-alias-label-primary);position:relative;overflow:hidden}
 .rp-cardcell:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}
 .rp-cardcell .rp-cardname,.rp-cardcell .rp-cardnote{display:block;position:relative;z-index:1}
+.rp-cardcell-text{display:flex;flex-direction:column;gap:2px;min-width:0}
 .rp-cardcell .rp-cardname{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rp-cardcell .rp-cardnote{font-size:11px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rp-greeting{max-height:120px;overflow-y:auto;white-space:pre-wrap;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);border-left:3px solid var(--dsw-alias-border-l2);padding:2px 0 2px 10px}
@@ -53,7 +54,7 @@ export const CSS = `
 .rp-cardrow + .rp-cardrow{margin-top:8px}
 .rp-cardrow .rp-grow{flex:1;min-width:0}
 .rp-cardrow .rp-tags{font-size:11px;color:var(--dsw-alias-label-secondary)}
-.rp-actions{display:flex;gap:6px;flex-wrap:wrap}
+.rp-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .rp-note{font-size:12px;color:var(--dsw-alias-label-secondary)}
 .rp-error{font-size:12px;color:var(--dsw-alias-state-error-primary, #e5484d)}
 .rp-editor-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -61,7 +62,21 @@ export const CSS = `
 .rp-editor-avatar-row{display:flex;align-items:center;gap:12px;margin:6px 0 10px}
 .rp-editor-avatar{width:64px;height:64px;border-radius:14px;object-fit:cover;border:1px solid var(--dsw-alias-border-l2)}
 .rp-loreentry{border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:8px 10px;margin:8px 0;background:var(--dsw-alias-bg-module-platform)}
-.rp-loreentry-head{display:flex;align-items:center;margin-bottom:4px}
+.rp-loreentry-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.rp-regex-swatch{width:14px;height:14px;border-radius:4px;border:1px solid var(--dsw-alias-border-l2);display:inline-block;flex:none;cursor:pointer;overflow:hidden;position:relative}
+.rp-regex-swatch input[type="color"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;padding:0;border:0;cursor:pointer}
+
+/* Store-scope chips (global vs current workspace), placed BEFORE the name. */
+.rp-scope-tag{font-size:11px;line-height:16px;border-radius:6px;padding:0 5px;margin-right:6px;vertical-align:1px;font-weight:400;white-space:nowrap}
+.rp-scope-global{color:var(--dsw-alias-state-business-primary, #4d6bfe);border:1px solid var(--dsw-alias-state-business-primary, #4d6bfe)}
+.rp-scope-workspace{color:var(--dsw-alias-label-secondary);border:1px solid var(--dsw-alias-border-l2)}
+
+/* Inline favorite star in front of the card name. */
+.rp-star{background:none;border:none;padding:0 4px 0 0;cursor:pointer;font-size:14px;color:var(--dsw-alias-state-business-primary, #4d6bfe)}
+.rp-star:hover{transform:scale(1.15)}
+
+/* Scope chip pinned to a gallery tile. */
+.rp-tile-scope{position:absolute;left:6px;bottom:6px;margin-right:0;background:var(--dsw-alias-bg-module-platform)}
 .rp-btn-primary{border-color:var(--dsw-alias-state-business-primary, #4d6bfe);color:var(--dsw-alias-state-business-primary, #4d6bfe);font-weight:600}
 .rp-btn-primary:hover{background:var(--dsw-alias-state-business-primary, #4d6bfe);color:#fff}
 .rp-btn-danger{color:var(--dsw-alias-state-error-primary, #e5484d)}

@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api, type CardSummary, type ReferenceMode, type RegexScriptValue, type SessionState } from './api.ts'
-import { takeResend } from './runtime.ts'
+import { takeResend, workspaceOfSession } from './runtime.ts'
 import { colorizeProse, compileCardRules, replaceMacros, startProseHighlighter, type CardColorRule } from './colorize.tsx'
 import { useT, tf } from './i18n.ts'
 
@@ -175,6 +175,8 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const [cards, setCards] = useState<CardSummary[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  /** This session's workspace path — recorded on the binding for host-side stores. */
+  const wsPath = workspaceOfSession(sessionId)?.path
 
   const reload = useCallback(() => {
     api.session(sessionId).then(setState).catch(err => setError(String(err instanceof Error ? err.message : err)))
@@ -193,21 +195,30 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const bound = state?.binding?.characterId ? state.card : null
   useEffect(() => {
     if (state && !bound && cards === null) {
-      api.cards().then(result => setCards(result.cards)).catch(err => setError(String(err instanceof Error ? err.message : err)))
+      api.cards(wsPath).then(result => setCards(result.cards)).catch(err => setError(String(err instanceof Error ? err.message : err)))
     }
-  }, [state, bound, cards])
+  }, [state, bound, cards, wsPath])
+
+  // Keep the binding's workspace path current — image generation, workspace
+  // card lookups and forge card creation on the host resolve through it.
+  // Creates the binding when absent (forge sessions may never pick a card).
+  useEffect(() => {
+    if (!state || !wsPath || state.binding?.workspacePath === wsPath) return
+    void api.updateSession(sessionId, { mode, workspacePath: wsPath }).then(reload).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, wsPath, sessionId, mode])
 
   const pick = useCallback(async (cardId: string) => {
     setBusy(true)
     try {
-      await api.updateSession(sessionId, { mode, characterId: cardId })
+      await api.updateSession(sessionId, { mode, characterId: cardId, ...(wsPath ? { workspacePath: wsPath } : {}) })
       reload()
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err))
     } finally {
       setBusy(false)
     }
-  }, [sessionId, mode, reload])
+  }, [sessionId, mode, reload, wsPath])
 
   const sendInstruction = useCallback((instruction: string) => {
     inputActions.setDraft(`[系统指令: ${instruction}]`)
@@ -248,11 +259,15 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
         ) : (
           <div className="rp-cardgrid">
             {cards.map(card => (
-              <button key={card.id} className="rp-cardcell" disabled={busy} onClick={() => void pick(card.id)}>
+              <button key={`${card.scope}-${card.id}`} className="rp-cardcell" disabled={busy} onClick={() => void pick(card.id)}>
                 <Avatar url={card.avatarUrl} name={card.name} />
-                <span style={{ minWidth: 0 }}>
-                  <span className="rp-cardname">{card.favorite ? '★ ' : ''}{card.name}</span>
-                  <br />
+                <span className="rp-cardcell-text">
+                  <span className="rp-cardname">
+                    <span className={`rp-scope-tag rp-scope-${card.scope}`}>
+                      {card.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
+                    </span>
+                    {card.favorite ? '★ ' : ''}{card.name}
+                  </span>
                   <span className="rp-cardnote">{card.creatorNotes || card.description || `${card.bookEntries}${t('rp.cards.lore')}`}</span>
                 </span>
               </button>
