@@ -100,5 +100,13 @@
     "react-dom": "18.3.1",
     "typescript": "^5.7.0",
     "zod": "^4.4.3"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chinosk6/dsh-roleplay.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chinosk6/dsh-roleplay/issues"
+  },
+  "homepage": "https://github.com/chinosk6/dsh-roleplay#readme"
 }

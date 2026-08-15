@@ -143,10 +143,10 @@ export function ImageGalleryPage({ onClose, ws }: { onClose: () => void; ws?: st
             >
               {selected.size === images.length && images.length > 0 ? t('rp.gallery.clearSelect') : t('rp.gallery.selectAll')}
             </button>
-            <button className="rp-btn" disabled={busy || selected.size === 0} onClick={() => moveSelected('global')}>
+            <button className="rp-btn rp-btn-blue" disabled={busy || selected.size === 0} onClick={() => moveSelected('global')}>
               {t('rp.gallery.moveGlobal')}
             </button>
-            <button className="rp-btn" disabled={busy || selected.size === 0 || !ws} onClick={() => moveSelected('workspace')}>
+            <button className="rp-btn rp-btn-green" disabled={busy || selected.size === 0 || !ws} onClick={() => moveSelected('workspace')}>
               {t('rp.gallery.moveWorkspace')}
             </button>
             <button className="rp-btn rp-btn-danger" disabled={busy || selected.size === 0} onClick={deleteSelected}>

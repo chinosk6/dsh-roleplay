@@ -398,7 +398,6 @@ function ErpSexConfig({ apiKey, model, onKeyChange, onModelChange }: {
           value={model}
           onChange={event => onModelChange(event.target.value)}
         />
-        <span className="rp-note">{t('rp.image.erpsex.modelHint')}</span>
       </div>
     </div>
   )
@@ -525,7 +524,7 @@ function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: Wor
               <div className="rp-actions">
                 <button className="rp-btn rp-btn-primary" onClick={() => onEdit(card.id)}>{t('rp.cards.edit')}</button>
                 <button
-                  className="rp-btn"
+                  className={`rp-btn ${card.scope === 'global' ? 'rp-btn-green' : 'rp-btn-blue'}`}
                   disabled={card.scope === 'global' && !ws}
                   title={card.scope === 'global' ? t('rp.cards.toWorkspace') : t('rp.cards.toGlobal')}
                   onClick={() => move(card)}

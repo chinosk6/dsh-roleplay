@@ -69,7 +69,13 @@ export const CSS = `
 /* Store-scope chips (global vs current workspace), placed BEFORE the name. */
 .rp-scope-tag{font-size:11px;line-height:16px;border-radius:6px;padding:0 5px;margin-right:6px;vertical-align:1px;font-weight:400;white-space:nowrap}
 .rp-scope-global{color:var(--dsw-alias-state-business-primary, #4d6bfe);border:1px solid var(--dsw-alias-state-business-primary, #4d6bfe)}
-.rp-scope-workspace{color:var(--dsw-alias-label-secondary);border:1px solid var(--dsw-alias-border-l2)}
+.rp-scope-workspace{color:var(--dsw-alias-state-success-primary, #2f9e63);border:1px solid var(--dsw-alias-state-success-primary, #2f9e63)}
+
+/* Store-move buttons, colored like the scope they move INTO. */
+.rp-btn-blue{color:var(--dsw-alias-state-business-primary, #4d6bfe);border-color:var(--dsw-alias-state-business-primary, #4d6bfe)}
+.rp-btn-blue:hover:not(:disabled){background:rgba(77,107,254,.1)}
+.rp-btn-green{color:var(--dsw-alias-state-success-primary, #2f9e63);border-color:var(--dsw-alias-state-success-primary, #2f9e63)}
+.rp-btn-green:hover:not(:disabled){background:rgba(47,158,99,.1)}
 
 /* Inline favorite star in front of the card name. */
 .rp-star{background:none;border:none;padding:0 4px 0 0;cursor:pointer;font-size:14px;color:var(--dsw-alias-state-business-primary, #4d6bfe)}
@@ -79,7 +85,7 @@ export const CSS = `
 .rp-tile-scope{position:absolute;left:6px;bottom:6px;margin-right:0;background:var(--dsw-alias-bg-module-platform)}
 .rp-btn-primary{border-color:var(--dsw-alias-state-business-primary, #4d6bfe);color:var(--dsw-alias-state-business-primary, #4d6bfe);font-weight:600}
 .rp-btn-primary:hover{background:var(--dsw-alias-state-business-primary, #4d6bfe);color:#fff}
-.rp-btn-danger{color:var(--dsw-alias-state-error-primary, #e5484d)}
+.rp-btn-danger{color:var(--dsw-alias-state-error-primary, #e5484d);border-color:var(--dsw-alias-state-error-primary, #e5484d)}
 .rp-btn-danger:hover{border-color:var(--dsw-alias-state-error-primary, #e5484d);background:rgba(229,72,77,.1)}
 .rp-forge-result{max-width:720px}
 .rp-toolcard-head{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}

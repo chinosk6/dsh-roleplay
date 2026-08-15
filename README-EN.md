@@ -1,6 +1,8 @@
 # dsh-roleplay
 
-[English](README-EN.md) | [简体中文](README.md)
+[![npm](https://img.shields.io/npm/v/dsh-roleplay.svg)](https://www.npmjs.com/package/dsh-roleplay)
+
+English | [简体中文](README.md)
 
 - DeepSeek Harness role-play plugin
 
