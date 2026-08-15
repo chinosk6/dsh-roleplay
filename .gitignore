@@ -1,0 +1,12 @@
+node_modules/
+lib/
+.pnpm-store/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.vs/
+.tempref/
+HANDOVER.md
+DESIGN.md

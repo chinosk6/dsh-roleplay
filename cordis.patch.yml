@@ -1,0 +1,13 @@
+# dsh-roleplay bundle layer: applied over the base/web layers when this
+# package is listed in a profile's `dsh.profile.bundles`.
+#
+# One host row carries both halves: the host plugin (settings, storage, HTTP
+# surface, agent presets) and — through this package's `dsh.client`
+# declaration — the browser bundle served at /plugins/dsh-roleplay/client.js.
+# The session-plane plugin (`dsh-roleplay/agent`) is NOT mounted here; the two
+# agent presets this plugin writes to <dshHome>/.agent-presets reference it
+# per session mode.
+
+- insert:
+    - id: roleplay
+      name: 'dsh-roleplay'
