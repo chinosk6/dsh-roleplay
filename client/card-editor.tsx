@@ -4,7 +4,7 @@
  *  - the save_character_card tool view (interactive result card in forge chats)
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue } from './api.ts'
+import { api, stampedUrl, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue } from './api.ts'
 import { compileCardRules, toHexColor, withColorValue } from './colorize.tsx'
 import { useT, tf } from './i18n.ts'
 
@@ -34,6 +34,9 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
   const t = useT()
   const [card, setCard] = useState<CharacterCardDetail['card'] | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  /** Bumped on every avatar mutation — the file is overwritten under a FIXED
+      URL, so the preview needs a fresh query to escape the browser cache. */
+  const [avatarStamp, setAvatarStamp] = useState(0)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -47,7 +50,9 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
         setAvatarUrl(result.avatarUrl)
       })
       .catch(err => setError(String(err instanceof Error ? err.message : err)))
-  }, [cardId])
+    // `ws` in deps: the workspaces feed loads async — a card opened before it
+    // resolves must re-fetch once the workspace path arrives.
+  }, [cardId, ws])
   useEffect(reload, [reload])
 
   const patch = useCallback((partial: Record<string, unknown>) => {
@@ -69,7 +74,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
     } finally {
       setBusy(false)
     }
-  }, [card, cardId, t, onSaved])
+  }, [card, cardId, t, onSaved, ws])
 
   const uploadAvatar = useCallback(async (files: FileList | null) => {
     const file = files?.[0]
@@ -79,13 +84,14 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
     try {
       const result = await api.updateCardAvatar(cardId, await file.arrayBuffer(), ws)
       setAvatarUrl(result.avatarUrl)
+      setAvatarStamp(Date.now())
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err))
     } finally {
       setBusy(false)
       if (fileRef.current) fileRef.current.value = ''
     }
-  }, [cardId])
+  }, [cardId, ws])
 
   const removeAvatar = useCallback(async () => {
     setBusy(true)
@@ -98,7 +104,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
     } finally {
       setBusy(false)
     }
-  }, [cardId])
+  }, [cardId, ws])
 
   const removeCard = useCallback(async () => {
     if (!card || !window.confirm(tf('rp.cards.deleteConfirm', { name: card.name }))) return
@@ -111,7 +117,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
       setError(String(err instanceof Error ? err.message : err))
       setBusy(false)
     }
-  }, [card, cardId, t, onDeleted, onClose])
+  }, [card, cardId, t, onDeleted, onClose, ws])
 
   if (error && !card) {
     return (
@@ -149,7 +155,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
 
       <div className="rp-editor-avatar-row">
         {avatarUrl
-          ? <img className="rp-editor-avatar" src={avatarUrl} alt={card.name} />
+          ? <img className="rp-editor-avatar" src={stampedUrl(avatarUrl, avatarStamp)} alt={card.name} />
           : <div className="rp-editor-avatar rp-avatar-fallback">{card.name.slice(0, 1) || '?'}</div>}
         <div className="rp-actions">
           <button className="rp-btn" disabled={busy} onClick={() => fileRef.current?.click()}>{t('rp.editor.avatar.upload')}</button>

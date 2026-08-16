@@ -213,6 +213,7 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
               firstMessage: card.firstMessage,
               avatarUrl: service.avatarUrl(card, cardScope, cardWs) ?? null,
               regexScripts: card.regexScripts,
+              updatedAt: card.updatedAt,
             }
           : null,
         autoImageDefault: settings.autoImage,

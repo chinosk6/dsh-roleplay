@@ -9,7 +9,10 @@ import { api } from './api.ts'
 
 interface SessionsFace {
   fork(opts: { sessionId: string; atSeq?: number }): Promise<string>
-  select(sessionId: string): void
+  /** Select a session as current (the ISessions face names this `open`). */
+  open?(sessionId: string): void
+  /** Older face spelling, kept as a fallback. */
+  select?(sessionId: string): void
 }
 
 interface WorkspaceRow {
@@ -22,6 +25,8 @@ interface WorkspaceRow {
 
 interface WorkspacesFace {
   archiveSession(sessionId: string): Promise<void>
+  /** Reorder an accounted session within its workspace (DOM-insertBefore-like). */
+  insertSessionBefore?(workspaceId: string, sessionId: string, beforeSessionId?: string): Promise<unknown>
   /** The workspaces snapshot feed (present on the real ctx.workspaces). */
   list?: {
     getSnapshot(): { items: readonly WorkspaceRow[]; recentWorkspaceId?: string | undefined }
@@ -107,15 +112,19 @@ export function takeResend(sessionId: string): string | undefined {
 
 /**
  * Rewind the conversation in place: fork the session at the previous turn's
- * end (the append-only log's rewrite primitive), carry the role-play binding
- * over, stage `resendText` for the fork's dock, switch to the fork, and
- * ARCHIVE the original — the visible session list keeps exactly one
- * conversation, edited from that point on.
+ * end (the append-only log's rewrite primitive — dsh has no truncate), carry
+ * the role-play binding over, stage `resendText` for the fork's dock, switch
+ * to the fork, and ARCHIVE the original. The fork INHERITS the durable title
+ * (no increaseTitle) and is slotted into the original's exact list position
+ * before the original disappears, so to the user this reads as editing the
+ * current conversation — same title, same place, same prefix.
  * @param prevTurnEndSeq - `turn/end` seq of the turn BEFORE the one being replaced.
  */
 export async function rewindAndResend(sessionId: string, prevTurnEndSeq: number, resendText: string): Promise<void> {
   if (!sessionsFace) throw new Error('roleplay runtime not wired')
+  const warn = (...args: unknown[]) => console.warn('[dsh-roleplay] rewind:', ...args)
   const state = await api.session(sessionId).catch(() => null)
+  const origin = workspaceOfSession(sessionId)
   const forkedId = await sessionsFace.fork({ sessionId, atSeq: prevTurnEndSeq })
   const binding = state?.binding
   if (binding) {
@@ -127,11 +136,24 @@ export async function rewindAndResend(sessionId: string, prevTurnEndSeq: number,
       ...(binding.imageCount !== undefined ? { imageCount: binding.imageCount } : {}),
       ...(binding.referenceMode !== undefined ? { referenceMode: binding.referenceMode } : {}),
       ...(binding.workspacePath !== undefined ? { workspacePath: binding.workspacePath } : {}),
-    }).catch(() => {})
+    }).catch(err => warn('binding copy failed', err))
+  }
+  // Take over the original's slot in the workspace list (fork attach prepends).
+  if (origin) {
+    await workspacesFace?.insertSessionBefore?.(origin.workspaceId, forkedId, sessionId)
+      .catch(err => warn('insertSessionBefore failed', err))
   }
   if (resendText.trim() !== '') pendingResend.set(forkedId, resendText)
-  sessionsFace.select(forkedId)
-  await workspacesFace?.archiveSession(sessionId).catch(() => {})
+  // The ISessions face names selection `open` (older builds spelled it `select`).
+  try {
+    const openSession = sessionsFace.open ?? sessionsFace.select
+    if (!openSession) throw new Error('sessions face exposes neither open nor select')
+    openSession.call(sessionsFace, forkedId)
+  } catch (error) {
+    warn('open failed', error)
+  }
+  await workspacesFace?.archiveSession(sessionId)
+    .catch(err => warn('archive failed', err))
 }
 
 // ── image revision bus ───────────────────────────────────────────────────────
@@ -156,5 +178,6 @@ export function subscribeImageRevs(listener: () => void): () => void {
 /** Cache-busted variant of a stored image URL (rev 0 = the original URL). */
 export function imageUrlWithRev(url: string, id: string): string {
   const rev = imageRev(id)
-  return rev === 0 ? url : `${url}?r=${rev}`
+  // Workspace-stored URLs already carry a ?ws= query — never emit a second '?'.
+  return rev === 0 ? url : `${url}${url.includes('?') ? '&' : '?'}r=${rev}`
 }

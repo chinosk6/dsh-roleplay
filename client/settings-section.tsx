@@ -1,6 +1,6 @@
 /** The「角色扮演」settings page: user identity, image backend, storage, gallery and card library + sub-pages. */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { api, formatBytes, type CardSummary, type ErpPoints, type GalleryUsage, type RoleplaySettingsValue, type StoreScope } from './api.ts'
+import { api, formatBytes, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type RoleplaySettingsValue, type StoreScope } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
 import { recentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
@@ -501,7 +501,7 @@ function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: Wor
           {cards.map(card => (
             <div key={`${card.scope}-${card.id}`} className="rp-cardrow">
               {card.avatarUrl
-                ? <img className="rp-avatar" src={card.avatarUrl} alt={card.name} />
+                ? <img className="rp-avatar" src={stampedUrl(card.avatarUrl, card.updatedAt)} alt={card.name} />
                 : <div className="rp-avatar-fallback">{card.name.slice(0, 1)}</div>}
               <div className="rp-grow">
                 <div className="rp-name">

@@ -9,10 +9,10 @@
  * shell; a compact character bar is then PORTALed into a holder right above
  * the composer seat so the character context never disappears mid-question.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { api, type CardSummary, type ReferenceMode, type RegexScriptValue, type SessionState } from './api.ts'
-import { takeResend, workspaceOfSession } from './runtime.ts'
+import { api, stampedUrl, type CardSummary, type ReferenceMode, type RegexScriptValue, type SessionState } from './api.ts'
+import { subscribeWorkspaces, takeResend, workspaceOfSession } from './runtime.ts'
 import { colorizeProse, compileCardRules, replaceMacros, startProseHighlighter, type CardColorRule } from './colorize.tsx'
 import { useT, tf } from './i18n.ts'
 
@@ -127,7 +127,7 @@ function OpeningBubble({ card, rules }: { card: BoundCard; rules: readonly CardC
   return (
     <div className="rp-opening">
       <div className="rp-opening-head">
-        <Avatar url={card.avatarUrl} name={card.name} />
+        <Avatar url={card.avatarUrl ? stampedUrl(card.avatarUrl, card.updatedAt) : null} name={card.name} />
         <span className="rp-opening-name">{card.name}</span>
         <span className="rp-opening-tag">{t('rp.opening.tag')}</span>
       </div>
@@ -175,8 +175,9 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const [cards, setCards] = useState<CardSummary[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  /** This session's workspace path — recorded on the binding for host-side stores. */
-  const wsPath = workspaceOfSession(sessionId)?.path
+  /** This session's workspace path — recorded on the binding for host-side stores.
+      Subscribed: the workspaces feed loads async and this must follow it in. */
+  const wsPath = useSyncExternalStore(subscribeWorkspaces, () => workspaceOfSession(sessionId)?.path)
 
   const reload = useCallback(() => {
     api.session(sessionId).then(setState).catch(err => setError(String(err instanceof Error ? err.message : err)))
@@ -193,6 +194,12 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   }, [running])
 
   const bound = state?.binding?.characterId ? state.card : null
+  // Avatar files are overwritten in place; updatedAt busts the browser cache.
+  const boundAvatar = bound?.avatarUrl ? stampedUrl(bound.avatarUrl, bound.updatedAt) : null
+  // A late-arriving workspace path must refresh the picker (workspace cards).
+  useEffect(() => {
+    setCards(null)
+  }, [wsPath])
   useEffect(() => {
     if (state && !bound && cards === null) {
       api.cards(wsPath).then(result => setCards(result.cards)).catch(err => setError(String(err instanceof Error ? err.message : err)))
@@ -260,7 +267,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           <div className="rp-cardgrid">
             {cards.map(card => (
               <button key={`${card.scope}-${card.id}`} className="rp-cardcell" disabled={busy} onClick={() => void pick(card.id)}>
-                <Avatar url={card.avatarUrl} name={card.name} />
+                <Avatar url={card.avatarUrl ? stampedUrl(card.avatarUrl, card.updatedAt) : null} name={card.name} />
                 <span className="rp-cardcell-text">
                   <span className="rp-cardname">
                     <span className={`rp-scope-tag rp-scope-${card.scope}`}>
@@ -306,7 +313,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
               <option key={n} value={n}>{tf('rp.dock.countN', { n })}</option>
             ))}
           </select>
-          <ReferencePopover sessionId={sessionId} state={state} reload={reload} avatarUrl={bound?.avatarUrl ?? null} />
+          <ReferencePopover sessionId={sessionId} state={state} reload={reload} avatarUrl={boundAvatar} />
         </>
       ) : null}
       <button
@@ -327,7 +334,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const questionBar = holder ? createPortal(
     <div className="rp-dock">
       <div className="rp-dock-row">
-        <Avatar url={bound.avatarUrl} name={bound.name} />
+        <Avatar url={boundAvatar} name={bound.name} />
         <span className="rp-name">{bound.name}</span>
         <span className="rp-muted">{t('rp.dock.answering')}</span>
         <span className="rp-spacer" />
@@ -341,7 +348,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     <>
       <div className="rp-dock">
         <div className="rp-dock-row">
-          <Avatar url={bound.avatarUrl} name={bound.name} />
+          <Avatar url={boundAvatar} name={bound.name} />
           <span className="rp-name">{bound.name}</span>
           {isForge ? <span className="rp-muted">{t('rp.dock.forge.editing')}</span> : null}
           <span className="rp-spacer" />

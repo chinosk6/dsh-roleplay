@@ -41,7 +41,7 @@ export interface SessionState {
     pendingInstruction?: string
     workspacePath?: string
   } | null
-  card: { id: string; name: string; firstMessage: string; avatarUrl: string | null; regexScripts: RegexScriptValue[] } | null
+  card: { id: string; name: string; firstMessage: string; avatarUrl: string | null; regexScripts: RegexScriptValue[]; updatedAt: number } | null
   autoImageDefault: boolean
   choiceModeDefault: boolean
   imageCountDefault: number
@@ -281,6 +281,16 @@ export interface GalleryUsage {
 export interface GalleryResponse {
   images: GalleryImage[]
   usage: GalleryUsage
+}
+
+/**
+ * Cache-bust a stored-file URL with a content stamp (e.g. the card's
+ * updatedAt): avatar files are overwritten IN PLACE under a fixed name, so an
+ * unchanged src would keep showing the browser-cached old image.
+ */
+export function stampedUrl(url: string, stamp: number | undefined): string {
+  if (!stamp) return url
+  return `${url}${url.includes('?') ? '&' : '?'}t=${stamp}`
 }
 
 /** Human-readable byte size. */
