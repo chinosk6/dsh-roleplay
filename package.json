@@ -1,7 +1,7 @@
 {
   "name": "dsh-roleplay",
   "description": "Role-play conversations, character-card authoring and image generation for DeepSeek Harness",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "license": "MIT",
   "engines": {
