@@ -109,8 +109,11 @@ function stickToBottom(element: HTMLElement): void {
  * yet when this renders: a load failure flips the tile into a waiting state
  * that polls the readiness endpoint until the file lands (then reloads via a
  * rev bump) or the task reports failure. Known output dimensions size the
- * waiting tile (and the img box) exactly like the final image, so the swap
- * shifts no layout.
+ * waiting tile (and the img box) like the final image, so the swap shifts
+ * little layout — but they are the REQUESTED size, and some backends only
+ * honor the aspect ratio (or pick their own size). Once the file loads, its
+ * natural dimensions replace the declared ones so the thumbnail is never
+ * stretched to a mismatched box.
  */
 function GeneratedImage({ url, id, width, height }: {
   url: string
@@ -122,6 +125,9 @@ function GeneratedImage({ url, id, width, height }: {
   const [zoomed, setZoomed] = useState(false)
   const [phase, setPhase] = useState<'show' | 'waiting' | 'failed'>('show')
   const [reason, setReason] = useState('')
+  // Actual file dimensions, read once the image loads (see the doc comment).
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
   // Guard against a ready-verdict/404 flicker loop (e.g. a truncated write).
   const retries = useRef(0)
   // The image arrived asynchronously at least once → re-pin the scroll on load.
@@ -129,11 +135,19 @@ function GeneratedImage({ url, id, width, height }: {
   // Re-render (with a cache-busting query) after regeneration or readiness.
   useSyncExternalStore(subscribeImageRevs, () => imageRev(id))
 
-  // Display box under the grid's 280×340 cap, from the known output size.
-  const scale = width && height ? Math.min(280 / width, 340 / height, 1) : undefined
-  const box = width && height && scale
-    ? { width: Math.round(width * scale), height: Math.round(height * scale) }
+  // Display box under the grid's 280×340 cap: from the actual file size once
+  // loaded, from the declared output size before that (placeholder sizing).
+  const source = natural ?? (width && height ? { width, height } : undefined)
+  const scale = source ? Math.min(280 / source.width, 340 / source.height, 1) : undefined
+  const box = source && scale
+    ? { width: Math.round(source.width * scale), height: Math.round(source.height * scale) }
     : undefined
+
+  // The ratio correction can change the tile height after the load event —
+  // re-pin the viewport the same way a late-arriving image does.
+  useEffect(() => {
+    if (natural && imgRef.current) stickToBottom(imgRef.current)
+  }, [natural])
 
   // Workspace-stored images carry their workspace in the URL query; the
   // readiness endpoint needs the same context to find the file.
@@ -189,15 +203,21 @@ function GeneratedImage({ url, id, width, height }: {
   }
   return (
     <img
+      ref={imgRef}
       src={imageUrlWithRev(url, id)}
       alt=""
       {...(box ? { width: box.width, height: box.height } : {})}
       style={zoomed ? { maxWidth: '100%', maxHeight: 'none', width: 'auto', height: 'auto' } : undefined}
       onClick={() => setZoomed(value => !value)}
       onLoad={event => {
+        const el = event.currentTarget
+        if (el.naturalWidth > 0 && el.naturalHeight > 0
+          && (natural?.width !== el.naturalWidth || natural?.height !== el.naturalHeight)) {
+          setNatural({ width: el.naturalWidth, height: el.naturalHeight })
+        }
         if (arrivedLate.current) {
           arrivedLate.current = false
-          stickToBottom(event.currentTarget)
+          stickToBottom(el)
         }
       }}
       onError={() => {
