@@ -7,10 +7,13 @@
 - DeepSeek Harness 角色扮演插件
 
 
+![screenshot1](images/screenshot1.png)
+
+
 
 # 功能
 
-- 角色卡生成 / 导入，支持交互式创建角色卡
+- 酒馆兼容角色卡生成 / 导入，支持交互式创建角色卡
 
 - 图片生成，支持：
   - NAI 官方接口

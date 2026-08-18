@@ -6,6 +6,8 @@ English | [简体中文](README.md)
 
 - DeepSeek Harness role-play plugin
 
+![screenshot1](images/screenshot1.png)
+
 
 
 # Features
