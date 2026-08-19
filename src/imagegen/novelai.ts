@@ -15,6 +15,43 @@ export interface NovelAiConfig {
   model: string
 }
 
+export interface NovelAiPoints {
+  /** Total spendable balance: fixed (subscription) + purchased steps. */
+  points: number
+  fixedTrainingStepsLeft: number
+  purchasedTrainingSteps: number
+}
+
+/**
+ * Query the account's Anlas balance from the fixed subscription endpoint
+ * (independent of the configured generation apiUrl). The spendable total is
+ * trainingStepsLeft.fixedTrainingStepsLeft + purchasedTrainingSteps.
+ * Auth failures answer 401 with { statusCode, message }.
+ */
+export async function fetchNovelAiPoints(apiKey: string, signal?: AbortSignal): Promise<NovelAiPoints> {
+  const response = await fetch('https://image.novelai.net/user/subscription', {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: signal ?? null,
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    let detail = text.slice(0, 300)
+    try {
+      const parsed = JSON.parse(text) as { message?: string }
+      if (typeof parsed.message === 'string') detail = parsed.message
+    } catch {
+      // keep raw text
+    }
+    throw new Error(`点数查询失败（HTTP ${response.status}）：${detail}`)
+  }
+  const body = (await response.json()) as {
+    trainingStepsLeft?: { fixedTrainingStepsLeft?: number; purchasedTrainingSteps?: number }
+  }
+  const fixed = typeof body.trainingStepsLeft?.fixedTrainingStepsLeft === 'number' ? body.trainingStepsLeft.fixedTrainingStepsLeft : 0
+  const purchased = typeof body.trainingStepsLeft?.purchasedTrainingSteps === 'number' ? body.trainingStepsLeft.purchasedTrainingSteps : 0
+  return { points: fixed + purchased, fixedTrainingStepsLeft: fixed, purchasedTrainingSteps: purchased }
+}
+
 const EOCD = 0x06054b50
 const CENTRAL = 0x02014b50
 

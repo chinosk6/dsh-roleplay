@@ -123,6 +123,12 @@ export interface ErpPoints {
   username?: string
 }
 
+export interface NovelAiPoints {
+  points: number
+  fixedTrainingStepsLeft: number
+  purchasedTrainingSteps: number
+}
+
 const BASE = '/x-roleplay'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -214,6 +220,7 @@ export const api = {
     }),
   referenceUrl: () => `${BASE}/settings/reference`,
   erpPoints: () => request<ErpPoints>('/erp/points'),
+  novelaiPoints: () => request<NovelAiPoints>('/novelai/points'),
   images: (ws?: string) => request<GalleryResponse>(withWs('/images', ws)),
   starImage: (id: string, starred: boolean, ws?: string) =>
     request<{ ok: boolean }>(withWs('/images/star', ws), {

@@ -242,6 +242,16 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
     return
   }
 
+  // ── NovelAI account ──
+  if (path === '/novelai/points' && method === 'GET') {
+    try {
+      sendJson(res, 200, await service.novelaiPoints())
+    } catch (error) {
+      sendJson(res, 502, { error: error instanceof Error ? error.message : String(error) })
+    }
+    return
+  }
+
   // ── gallery ──
   if (path === '/images' && method === 'GET') {
     sendJson(res, 200, await service.listImages(ws))

@@ -14,7 +14,7 @@ import { CharacterCard, GeneratedImage, SessionBinding } from './cards/types.ts'
 import { cardFromInterchange, cardFromPng, cardToInterchange, cardToPng } from './cards/codec.ts'
 import { encodeSolidPng, isPng } from './cards/png.ts'
 import { RoleplaySettings } from './settings.ts'
-import { createNovelAiProvider } from './imagegen/novelai.ts'
+import { createNovelAiProvider, fetchNovelAiPoints, type NovelAiPoints } from './imagegen/novelai.ts'
 import { createSdWebUiProvider } from './imagegen/sdwebui.ts'
 import { createUrlTemplateProvider } from './imagegen/urltemplate.ts'
 import { createErpSexProvider, fetchErpSexPoints, type ErpSexPoints } from './imagegen/erpsex.ts'
@@ -85,6 +85,13 @@ export class RoleplayService extends Service {
     const apiKey = this.settings.get().erpsexApiKey.trim()
     if (apiKey === '') throw new Error('尚未配置 API Key')
     return fetchErpSexPoints(apiKey)
+  }
+
+  /** Anlas balance of the NovelAI account. */
+  async novelaiPoints(): Promise<NovelAiPoints> {
+    const apiKey = this.settings.get().novelaiApiKey.trim()
+    if (apiKey === '') throw new Error('尚未配置 API Key')
+    return fetchNovelAiPoints(apiKey)
   }
 
   /** Open storage and prepare the data directories; runs once before use. */

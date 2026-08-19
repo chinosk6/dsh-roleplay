@@ -1,6 +1,6 @@
 /** The「角色扮演」settings page: user identity, image backend, storage, gallery and card library + sub-pages. */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { api, formatBytes, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type RoleplaySettingsValue, type StoreScope } from './api.ts'
+import { api, formatBytes, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type NovelAiPoints, type RoleplaySettingsValue, type StoreScope } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
 import { recentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
@@ -120,11 +120,14 @@ export function RoleplaySettingsSection(): ReactNode {
           />
         ) : null}
         {draft.imageProvider === 'novelai' ? (
-          <div>
-            {text('novelaiApiUrl', t('rp.image.apiUrl'))}
-            {text('novelaiApiKey', t('rp.image.apiKey'), { secret: true })}
-            {text('novelaiModel', t('rp.image.model'))}
-          </div>
+          <NovelAiConfig
+            apiUrl={draft.novelaiApiUrl}
+            apiKey={draft.novelaiApiKey}
+            model={draft.novelaiModel}
+            onUrlChange={value => patch({ novelaiApiUrl: value })}
+            onKeyChange={value => patch({ novelaiApiKey: value })}
+            onModelChange={value => patch({ novelaiModel: value })}
+          />
         ) : null}
         {draft.imageProvider === 'sdwebui' ? (
           <div>
@@ -395,6 +398,89 @@ function ErpSexConfig({ apiKey, model, onKeyChange, onModelChange }: {
         <input
           type="text"
           placeholder="nai-diffusion-4-5-full"
+          value={model}
+          onChange={event => onModelChange(event.target.value)}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * NovelAI backend config: endpoint/key/model, with the account's Anlas
+ * balance and a manual refresh beside the API key (same row layout as the
+ * hosted-wrapper block).
+ */
+function NovelAiConfig({ apiUrl, apiKey, model, onUrlChange, onKeyChange, onModelChange }: {
+  apiUrl: string
+  apiKey: string
+  model: string
+  onUrlChange: (value: string) => void
+  onKeyChange: (value: string) => void
+  onModelChange: (value: string) => void
+}): ReactNode {
+  const t = useT()
+  const [points, setPoints] = useState<NovelAiPoints | null>(null)
+  const [pointsError, setPointsError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const refresh = useCallback(() => {
+    setLoading(true)
+    setPointsError('')
+    api.novelaiPoints()
+      .then(setPoints)
+      .catch(err => {
+        setPoints(null)
+        setPointsError(String(err instanceof Error ? err.message : err))
+      })
+      .finally(() => setLoading(false))
+  }, [])
+  useEffect(() => {
+    if (apiKey.trim() !== '') refresh()
+    // 初次挂载按已保存的 key 拉一次；输入过程中不自动刷。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh])
+
+  return (
+    <div>
+      <div className="rp-field">
+        <label>{t('rp.image.apiUrl')}</label>
+        <input
+          type="text"
+          value={apiUrl}
+          onChange={event => onUrlChange(event.target.value)}
+        />
+      </div>
+      <div className="rp-field">
+        <label>{t('rp.image.apiKey')}</label>
+        <div className="rp-keyrow">
+          <input
+            type="password"
+            value={apiKey}
+            onChange={event => onKeyChange(event.target.value)}
+          />
+          <span
+            className="rp-points"
+            title={points ? `${t('rp.image.novelai.fixed')}: ${points.fixedTrainingStepsLeft} · ${t('rp.image.novelai.purchased')}: ${points.purchasedTrainingSteps}` : undefined}
+          >
+            {loading
+              ? t('rp.image.novelai.loading')
+              : points
+                ? tf('rp.image.novelai.points', { points: points.points })
+                : pointsError
+                  ? t('rp.image.novelai.pointsError')
+                  : '—'}
+          </span>
+          <button className="rp-btn" disabled={loading || apiKey.trim() === ''} title={t('rp.image.novelai.refresh')} onClick={refresh}>
+            ⟳
+          </button>
+        </div>
+        {pointsError ? <span className="rp-error">{pointsError}</span> : null}
+      </div>
+      <div className="rp-field">
+        <label>{t('rp.image.model')}</label>
+        <input
+          type="text"
           value={model}
           onChange={event => onModelChange(event.target.value)}
         />
