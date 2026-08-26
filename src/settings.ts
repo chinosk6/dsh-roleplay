@@ -7,6 +7,8 @@ export interface RoleplaySettings {
   userName: string
   /** Optional player persona injected below the character definition. */
   userPersona: string
+  /** When enabled, role-play sessions mount the filesystem tools (read/write/edit). */
+  allowFileTools: boolean
   /** Subfolder inside each workspace holding that workspace's role-play data. */
   workspaceSubfolder: string
   /** Where generated images are stored (workspace falls back to global without one). */
@@ -50,6 +52,7 @@ export interface RoleplaySettings {
 export const RoleplaySettings: z<RoleplaySettings> = z.object({
   userName: z.string().default('你'),
   userPersona: z.string().default(''),
+  allowFileTools: z.boolean().default(false),
   workspaceSubfolder: z.string().default('.dsh-roleplay'),
   imageStore: z.union(['workspace', 'global']).default('workspace'),
   cardStore: z.union(['workspace', 'global']).default('workspace'),

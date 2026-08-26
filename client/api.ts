@@ -91,6 +91,7 @@ export type ImageSizeValue = 'portrait' | 'landscape' | 'square' | 'ratio43' | '
 export interface RoleplaySettingsValue {
   userName: string
   userPersona: string
+  allowFileTools: boolean
   workspaceSubfolder: string
   imageStore: StoreScope
   cardStore: StoreScope
