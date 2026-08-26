@@ -22,10 +22,12 @@ import {
   forgePersona,
   loreContext,
   noAutoImageSection,
+  nsfwEnhanceSection,
   roleplayStandingRules,
   selectLore,
   unboundHint,
 } from './prompts.ts'
+import { resolveUploadedImagePng } from './uploads.ts'
 import type {} from './service.ts'
 
 export const name = 'roleplay-agent'
@@ -99,7 +101,7 @@ export function apply(ctx: Context, config: Config): void {
     ctx.systemPrompt.section({
       name: PERSONA_SECTION,
       order: PERSONA_ORDER,
-      text: () => forgePersona(),
+      text: () => [forgePersona(), nsfwEnhanceSection()].join('\n\n'),
     })
     ctx.systemPrompt.section({
       name: 'roleplay:forge-card',
@@ -114,7 +116,7 @@ export function apply(ctx: Context, config: Config): void {
       },
     })
     registerForgeTools(ctx)
-    registerImageTool(ctx, false)
+    registerImageTool(ctx, false, true)
     return
   }
 
@@ -273,15 +275,33 @@ export function apply(ctx: Context, config: Config): void {
  * are queued so the story keeps streaming while images render (the client
  * polls readiness). Forge mode keeps `false`: an avatar id must exist on disk
  * before save_character_card copies it.
+ * @param uploadReference - forge mode only: adds the `reference_upload_index`
+ * parameter that turns a chat-uploaded image into the generation reference.
+ * Role-play mode keeps `false`, leaving its tool schema and behavior untouched.
  */
-function registerImageTool(ctx: Context, background: boolean): void {
+function registerImageTool(ctx: Context, background: boolean, uploadReference = false): void {
   ctx.tools.register(defineTool({
     name: 'generate_image',
     description:
-      '为当前场景生成插图。prompt 使用英文 danbooru 风格 tag（逗号分隔）：主体身份、外貌、表情姿势、动作、服装、环境光照、构图镜头。成人画面带 nsfw；用户在场用 pov、不要画用户的脸。生成的图片会直接展示给用户。',
+      '为当前场景生成插图。prompt 使用英文 danbooru 风格 tag（逗号分隔）：主体身份、外貌、表情姿势、动作、服装、环境光照、构图镜头。成人画面带 nsfw；用户在场用 pov、不要画用户的脸。生成的图片会直接展示给用户。'
+      + (uploadReference
+        ? '若用户上传了图片并希望以其为参考（画风、人物特征等），传 reference_upload_index 指定用哪一张；若用户希望以某张角色卡当前的头像为参考（如"以现在的头像为参考换头像"），传 reference_avatar_card_id。用户没有参考意图时都不要传。'
+        : ''),
     parameters: {
       prompt: { type: 'string', required: true, description: 'English danbooru-style tags, comma separated' },
       count: { type: 'number', description: 'Number of images (1-6); omit to use the configured default. Pass 1 when interleaving several illustrations between paragraphs' },
+      ...(uploadReference
+        ? {
+            reference_upload_index: {
+              type: 'number' as const,
+              description: '以用户在本会话上传的第 N 张图片为生成参考图：按上传顺序 1 为第一张，-1 为最新一张。仅支持 PNG/JPEG 上传图',
+            },
+            reference_avatar_card_id: {
+              type: 'string' as const,
+              description: '以该 card_id 对应角色卡的当前头像为生成参考图。与 reference_upload_index 二选一（同时传以上传图为准）',
+            },
+          }
+        : {}),
     },
     output: {
       schema: {
@@ -308,7 +328,11 @@ function registerImageTool(ctx: Context, background: boolean): void {
         type: 'text',
         text: background
           ? `已安排 ${value.images.length} 张插图在后台生成，完成后会自动展示给用户。请立即继续正文剧情：不要等待生成、不要提及生成过程、不要在回复中粘贴图片链接。`
-          : `已生成 ${value.images.length} 张插图并直接展示给用户。请继续正文剧情，不要在回复中粘贴图片链接。`,
+          : [
+              `已生成 ${value.images.length} 张图片并直接展示给用户：`,
+              ...value.images.map((image, index) => `第 ${index + 1} 张 image_id: ${image.id}`),
+              '需要设为头像时，把对应 image_id 作为 avatar_image_id 传给 save_character_card。不要在回复中粘贴图片链接。',
+            ].join('\n'),
       }],
       presentationMeta: (_args, value) => ({ images: value.images }),
     },
@@ -317,12 +341,20 @@ function registerImageTool(ctx: Context, background: boolean): void {
       const agentId = exec.agent ? String(exec.agent.id) : undefined
       const binding = agentId ? ctx.roleplay.getBinding(agentId) : undefined
       const count = args.count ?? binding?.imageCount ?? ctx.roleplay.settings.get().imageCount
+      const extra = args as { reference_upload_index?: number; reference_avatar_card_id?: string }
+      let reference: Buffer | undefined
+      if (uploadReference && extra.reference_upload_index !== undefined) {
+        reference = await resolveUploadedImagePng(ctx, exec.agent, extra.reference_upload_index)
+      } else if (uploadReference && extra.reference_avatar_card_id) {
+        reference = await ctx.roleplay.cardAvatarPng(extra.reference_avatar_card_id, binding?.workspacePath)
+      }
       const images = await ctx.roleplay.generateImages(
         args.prompt,
         count,
         background ? undefined : exec.signal,
         agentId,
         !background,
+        reference,
       )
       return { images }
     },
@@ -347,6 +379,7 @@ function registerForgeTools(ctx: Context): void {
       creator_notes: { type: 'string', description: 'Hashtag-style notes, e.g. "#奇幻 #校园"' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Topic tags' },
       avatar_image_id: { type: 'string', description: 'Image id from a previous generate_image call to use as the portrait' },
+      avatar_upload_index: { type: 'number', description: '使用用户在本会话上传的第 N 张图片作为头像：按上传顺序 1 为第一张，-1 为最新一张；仅支持 PNG/JPEG。用户上传了图片并要求用作头像时用这个，与 avatar_image_id 二选一（同时给出时以本参数为准）' },
       regex_scripts: {
         type: 'array',
         description: 'Display-coloring regex rules applied to the character\'s replies',
@@ -385,11 +418,16 @@ function registerForgeTools(ctx: Context): void {
           card_id: { type: 'string', required: true },
           name: { type: 'string', required: true },
           avatar_url: { type: 'string' },
+          previous_avatar_image_id: { type: 'string' },
         },
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `角色卡「${value.name}」已保存（id: ${value.card_id}）。用户可在「设置 → 角色扮演」中导出 PNG/JSON，或新建「角色扮演」会话使用它。`,
+        text: `角色卡「${value.name}」已保存（id: ${value.card_id}）。`
+          + (value.previous_avatar_image_id
+            ? `原头像已自动备份（image_id: ${value.previous_avatar_image_id}）；用户想换回原头像时，把它作为 avatar_image_id 再保存一次即可。`
+            : '')
+          + '用户可在「设置 → 角色扮演」中导出 PNG/JSON，或新建「角色扮演」会话使用它。',
       }],
       presentationMeta: (_args, value) => ({ ...value }),
     },
@@ -435,10 +473,24 @@ function registerForgeTools(ctx: Context): void {
         ...(regexScripts !== undefined ? { regexScripts } : {}),
         ...(book !== undefined ? { book } : {}),
       }, { store: svc.settings.get().cardStore, wsPath })
-      if (args.avatar_image_id) card = await svc.setAvatarFromImage(card.id, args.avatar_image_id, wsPath)
+      let previousAvatarImageId: string | undefined
+      if (args.avatar_upload_index !== undefined || args.avatar_image_id) {
+        previousAvatarImageId = await svc.archiveCurrentAvatar(card.id, wsPath)
+      }
+      if (args.avatar_upload_index !== undefined) {
+        const png = await resolveUploadedImagePng(ctx, exec.agent, args.avatar_upload_index)
+        card = await svc.setAvatar(card.id, png, wsPath)
+      } else if (args.avatar_image_id) {
+        card = await svc.setAvatarFromImage(card.id, args.avatar_image_id, wsPath)
+      }
       const scope = svc.cardScope(card.id, wsPath)
       const avatarUrl = svc.avatarUrl(card, scope, wsPath)
-      return { card_id: card.id, name: card.name, ...(avatarUrl ? { avatar_url: avatarUrl } : {}) }
+      return {
+        card_id: card.id,
+        name: card.name,
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+        ...(previousAvatarImageId ? { previous_avatar_image_id: previousAvatarImageId } : {}),
+      }
     },
   }))
 

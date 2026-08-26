@@ -92,6 +92,7 @@ export interface RoleplaySettingsValue {
   userName: string
   userPersona: string
   allowFileTools: boolean
+  allowWebTools: boolean
   workspaceSubfolder: string
   imageStore: StoreScope
   cardStore: StoreScope

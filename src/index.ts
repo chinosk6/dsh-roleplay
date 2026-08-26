@@ -56,10 +56,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const writePresets = async () => {
     try {
-      const roleplaySettings = ctx.settings.get(ROLEPLAY_NS) as { allowFileTools?: boolean } | undefined
+      const { allowFileTools, allowWebTools } = service.settings.get()
       const changed = await materializePresets(
         presetLocaleOf(ctx.settings.get(LOCALE_NS)),
-        roleplaySettings?.allowFileTools === true,
+        { allowFileTools, allowWebTools },
       )
       if (changed) notifyRosterChanged()
     } catch (error) {
@@ -68,7 +68,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   await writePresets()
   // Keep the preset display text in the UI language, and re-materialize the
-  // role-play composition whenever the file-permission toggle changes.
+  // role-play composition whenever a risk toggle changes.
   ctx.on('settings/updated', ns => {
     if (ns === LOCALE_NS || ns === ROLEPLAY_NS) void writePresets()
   })

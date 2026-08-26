@@ -1,5 +1,6 @@
 /** The「角色扮演」settings page: user identity, image backend, storage, gallery and card library + sub-pages. */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { IconQuestionOutline14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, formatBytes, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type NovelAiPoints, type RoleplaySettingsValue, type StoreScope } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
@@ -13,6 +14,30 @@ function Field({ label, children }: { label: string; children: ReactNode }): Rea
     <div className="rp-field">
       <label>{label}</label>
       {children}
+    </div>
+  )
+}
+
+/** One opt-in row in the risky-features block: label + hover-help on the left, a switch on the right. */
+function RiskToggle({ label, hint, value, onToggle }: { label: string; hint: string; value: boolean; onToggle: () => void }): ReactNode {
+  return (
+    <div className="rp-risk-row">
+      <span className="rp-risk-label">
+        {label}
+        <Tooltip label={hint} side="bottom" maxWidth={320}>
+          <span className="rp-risk-help" tabIndex={0}><IconQuestionOutline14 size={14} /></span>
+        </Tooltip>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        className={`rp-switch${value ? ' rp-on' : ''}`}
+        onClick={onToggle}
+      >
+        <span className="rp-switch-knob" />
+      </button>
     </div>
   )
 }
@@ -98,17 +123,23 @@ export function RoleplaySettingsSection(): ReactNode {
         <Field label={t('rp.player.persona')}>
           <textarea value={draft.userPersona} onChange={event => patch({ userPersona: event.target.value })} />
         </Field>
-        <div className="rp-field">
-          <button
-            className={`rp-btn${draft.allowFileTools ? ' rp-on' : ''}`}
-            title={t('rp.player.fileTools.hint')}
-            onClick={() => patch({ allowFileTools: !draft.allowFileTools })}
-          >
-            {t('rp.player.fileTools')}
-            {draft.allowFileTools ? t('rp.player.fileTools.on') : t('rp.player.fileTools.off')}
-          </button>
-          <span className="rp-note">{t('rp.player.fileTools.hint')}</span>
-        </div>
+      </div>
+
+      <div>
+        <h4>{t('rp.risk.heading')}</h4>
+        <span className="rp-note">{t('rp.risk.warning')}</span>
+        <RiskToggle
+          label={t('rp.risk.fileTools')}
+          hint={t('rp.risk.fileTools.hint')}
+          value={draft.allowFileTools}
+          onToggle={() => patch({ allowFileTools: !draft.allowFileTools })}
+        />
+        <RiskToggle
+          label={t('rp.risk.webTools')}
+          hint={t('rp.risk.webTools.hint')}
+          value={draft.allowWebTools}
+          onToggle={() => patch({ allowWebTools: !draft.allowWebTools })}
+        />
       </div>
 
       <div>

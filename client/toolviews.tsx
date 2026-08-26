@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import { api } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { bumpImageRevs, imageRev, imageUrlWithRev, recentWorkspace, subscribeImageRevs } from './runtime.ts'
+import { ImageLightbox } from './lightbox.tsx'
 import { useT } from './i18n.ts'
 
 interface ToolViewProps {
@@ -122,7 +123,7 @@ function GeneratedImage({ url, id, width, height }: {
   height?: number | undefined
 }): ReactNode {
   const t = useT()
-  const [zoomed, setZoomed] = useState(false)
+  const [preview, setPreview] = useState(false)
   const [phase, setPhase] = useState<'show' | 'waiting' | 'failed'>('show')
   const [reason, setReason] = useState('')
   // Actual file dimensions, read once the image loads (see the doc comment).
@@ -202,35 +203,37 @@ function GeneratedImage({ url, id, width, height }: {
     )
   }
   return (
-    <img
-      ref={imgRef}
-      src={imageUrlWithRev(url, id)}
-      alt=""
-      {...(box ? { width: box.width, height: box.height } : {})}
-      style={zoomed ? { maxWidth: '100%', maxHeight: 'none', width: 'auto', height: 'auto' } : undefined}
-      onClick={() => setZoomed(value => !value)}
-      onLoad={event => {
-        const el = event.currentTarget
-        if (el.naturalWidth > 0 && el.naturalHeight > 0
-          && (natural?.width !== el.naturalWidth || natural?.height !== el.naturalHeight)) {
-          setNatural({ width: el.naturalWidth, height: el.naturalHeight })
-        }
-        if (arrivedLate.current) {
-          arrivedLate.current = false
-          stickToBottom(el)
-        }
-      }}
-      onError={() => {
-        arrivedLate.current = true
-        retries.current += 1
-        if (retries.current > 8) {
-          setReason('')
-          setPhase('failed')
-        } else {
-          setPhase('waiting')
-        }
-      }}
-    />
+    <>
+      <img
+        ref={imgRef}
+        src={imageUrlWithRev(url, id)}
+        alt=""
+        {...(box ? { width: box.width, height: box.height } : {})}
+        onClick={() => setPreview(true)}
+        onLoad={event => {
+          const el = event.currentTarget
+          if (el.naturalWidth > 0 && el.naturalHeight > 0
+            && (natural?.width !== el.naturalWidth || natural?.height !== el.naturalHeight)) {
+            setNatural({ width: el.naturalWidth, height: el.naturalHeight })
+          }
+          if (arrivedLate.current) {
+            arrivedLate.current = false
+            stickToBottom(el)
+          }
+        }}
+        onError={() => {
+          arrivedLate.current = true
+          retries.current += 1
+          if (retries.current > 8) {
+            setReason('')
+            setPhase('failed')
+          } else {
+            setPhase('waiting')
+          }
+        }}
+      />
+      {preview && <ImageLightbox src={imageUrlWithRev(url, id)} onClose={() => setPreview(false)} />}
+    </>
   )
 }
 

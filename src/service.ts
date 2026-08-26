@@ -368,6 +368,35 @@ export class RoleplayService extends Service {
     return this.setAvatar(cardId, bytes, wsPath)
   }
 
+  /**
+   * Archive a card's current portrait into the images store (content-hash id,
+   * deduplicated) so a later `setAvatar` overwrite stays recoverable via
+   * `setAvatarFromImage`. Returns the archived image id, or undefined when the
+   * card is missing or has no portrait. No gallery record is written — the
+   * backup is reachable by id but does not clutter the image gallery.
+   */
+  async archiveCurrentAvatar(cardId: string, wsPath?: string): Promise<string | undefined> {
+    const located = this.locateCard(cardId, wsPath)
+    if (!located) return undefined
+    const bytes = await this.readAvatar(located.card, located.root)
+    if (!bytes) return undefined
+    const id = createHash('sha256').update(bytes).digest('hex').slice(0, 40)
+    const root = located.scope === 'workspace' ? located.root : undefined
+    if (root) await this.ensureWsDirs(root)
+    const path = root ? join(root, 'images', `${id}.png`) : join(this.dataDir, 'images', `${id}.png`)
+    if (!existsSync(path)) await writeFile(path, bytes)
+    return id
+  }
+
+  /** A card's current portrait as PNG bytes, resolved across both stores; throws when absent. */
+  async cardAvatarPng(cardId: string, wsPath?: string): Promise<Buffer> {
+    const located = this.locateCard(cardId, wsPath)
+    if (!located) throw new Error(`卡片 ${cardId} 不存在`)
+    const bytes = await this.readAvatar(located.card, located.root)
+    if (!bytes) throw new Error(`卡片「${located.card.name}」当前没有头像`)
+    return bytes
+  }
+
   async readAvatar(card: CharacterCard, wsRoot?: string): Promise<Buffer | undefined> {
     if (!card.avatar) return undefined
     try {
@@ -606,6 +635,8 @@ export class RoleplayService extends Service {
    * `imageStates()` until every id leaves `pending`. `wait: true` resolves
    * only after all files exist (rejecting on the first failure).
    * @param agentId - caller session id, used to resolve the avatar reference.
+   * @param referenceOverride - explicit reference bytes (PNG); when present it
+   * replaces the session/global reference resolution entirely.
    */
   async generateImages(
     prompt: string,
@@ -613,6 +644,7 @@ export class RoleplayService extends Service {
     signal?: AbortSignal,
     agentId?: string,
     wait = true,
+    referenceOverride?: Buffer,
   ): Promise<GeneratedImageRef[]> {
     const config = this.settings.get()
     if (config.imageProvider === 'none') throw new Error('未启用生图后端：请在「设置 → 角色扮演」中选择并配置生图接口')
@@ -623,7 +655,7 @@ export class RoleplayService extends Service {
     const { width, height } = dimensionsOf(config.imageSize)
     const fullPrompt = [config.stylePrompt.trim(), prompt.trim()].filter(Boolean).join(', ')
     const total = Math.min(6, Math.max(1, Math.floor(count)))
-    const reference = await this.referenceImageFor(agentId)
+    const reference = referenceOverride ?? await this.referenceImageFor(agentId)
     // Store target: the workspace of the calling session when the setting
     // asks for it AND the session recorded a usable workspace path.
     const wsPath = config.imageStore === 'workspace'

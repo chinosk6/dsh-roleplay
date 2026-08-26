@@ -37,6 +37,11 @@ export const CSS = `
 .rp-textarea{width:100%;box-sizing:border-box;min-height:64px;resize:vertical;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);padding:6px 8px;font-family:inherit;font-size:12px}
 .rp-imggrid{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
 .rp-imggrid img{max-width:280px;max-height:340px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);cursor:zoom-in}
+/* Original-image preview layer — mirrors the harness's attachment lightbox. */
+.rp-lightbox{z-index:1000;place-items:center;padding:40px;display:grid;position:fixed;inset:0}
+.rp-lightbox-mask{background:var(--dsw-alias-bg-mask-1);backdrop-filter:var(--dsw-mask-blur);position:absolute;inset:0}
+.rp-lightbox-img{object-fit:contain;background:var(--dsw-specific-input-major);max-width:min(100%,1600px);max-height:calc(100vh - 80px);box-shadow:var(--dsw-shadow-lv3);border-radius:12px;position:relative}
+.rp-lightbox-close{z-index:1;border:1px solid var(--dsw-alias-border-l2-darkmode-thin);background:var(--dsw-specific-input-major);width:36px;height:36px;color:var(--dsw-alias-label-primary);cursor:pointer;border-radius:999px;place-items:center;display:grid;position:fixed;top:20px;right:20px}
 .rp-toolcard{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-radius:12px;background:var(--dsw-alias-bg-module-platform);border:1px solid var(--dsw-alias-border-l2)}
 .rp-toolcard-title{font-size:12px;color:var(--dsw-alias-label-secondary)}
 .rp-savedcard{display:flex;gap:10px;align-items:center}
@@ -50,6 +55,14 @@ export const CSS = `
 .rp-field textarea{min-height:60px;resize:vertical}
 .rp-inline{display:flex;gap:12px;flex-wrap:wrap}
 .rp-inline .rp-field{flex:1;min-width:140px}
+.rp-risk-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0}
+.rp-risk-label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--dsw-alias-label-primary)}
+.rp-risk-help{display:inline-flex;align-items:center;color:var(--dsw-alias-label-secondary);cursor:help;outline:none}
+.rp-risk-help:hover,.rp-risk-help:focus-visible{color:var(--dsw-alias-label-primary)}
+.rp-switch{position:relative;flex:none;width:36px;height:20px;border-radius:10px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-module-platform);cursor:pointer;padding:0;transition:background .15s ease,border-color .15s ease}
+.rp-switch .rp-switch-knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--dsw-alias-label-secondary);transition:left .15s ease,background .15s ease}
+.rp-switch.rp-on{background:var(--dsw-alias-state-business-primary, #4d6bfe);border-color:var(--dsw-alias-state-business-primary, #4d6bfe)}
+.rp-switch.rp-on .rp-switch-knob{left:18px;background:#fff}
 .rp-cardrow{display:flex;align-items:center;gap:10px;padding:8px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-module-platform)}
 .rp-cardrow + .rp-cardrow{margin-top:8px}
 .rp-cardrow .rp-grow{flex:1;min-width:0}

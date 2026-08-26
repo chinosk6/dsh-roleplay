@@ -155,7 +155,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
 
       <div className="rp-editor-avatar-row">
         {avatarUrl
-          ? <img className="rp-editor-avatar" src={stampedUrl(avatarUrl, avatarStamp)} alt={card.name} />
+          ? <img className="rp-editor-avatar" src={stampedUrl(avatarUrl, Math.max(card.updatedAt ?? 0, avatarStamp))} alt={card.name} />
           : <div className="rp-editor-avatar rp-avatar-fallback">{card.name.slice(0, 1) || '?'}</div>}
         <div className="rp-actions">
           <button className="rp-btn" disabled={busy} onClick={() => fileRef.current?.click()}>{t('rp.editor.avatar.upload')}</button>
