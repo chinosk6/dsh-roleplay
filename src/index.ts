@@ -26,6 +26,9 @@ export const Config: z<Config> = z.object({
 /** The locale namespace is owned by the dsh locale plugin; read-only here. */
 const LOCALE_NS = settingsNamespace('locale')
 
+/** The roleplay settings namespace, registered by RoleplayService. */
+const ROLEPLAY_NS = settingsNamespace('roleplay')
+
 /** Namespace the preset-picker UIs key their roster-refresh event on. */
 const AGENT_PRESETS_NS = settingsNamespace('agent-presets')
 
@@ -53,16 +56,21 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const writePresets = async () => {
     try {
-      const changed = await materializePresets(presetLocaleOf(ctx.settings.get(LOCALE_NS)))
+      const roleplaySettings = ctx.settings.get(ROLEPLAY_NS) as { allowFileTools?: boolean } | undefined
+      const changed = await materializePresets(
+        presetLocaleOf(ctx.settings.get(LOCALE_NS)),
+        roleplaySettings?.allowFileTools === true,
+      )
       if (changed) notifyRosterChanged()
     } catch (error) {
       ctx.logger.warn('failed to write agent presets: %s', error)
     }
   }
   await writePresets()
-  // Keep the preset display text in the UI language: rewrite on locale change.
+  // Keep the preset display text in the UI language, and re-materialize the
+  // role-play composition whenever the file-permission toggle changes.
   ctx.on('settings/updated', ns => {
-    if (ns === LOCALE_NS) void writePresets()
+    if (ns === LOCALE_NS || ns === ROLEPLAY_NS) void writePresets()
   })
   // The locale namespace may register after this plugin loads, in which case
   // the first write above fell back to Chinese. Poll briefly for the

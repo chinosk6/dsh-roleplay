@@ -98,6 +98,17 @@ export function RoleplaySettingsSection(): ReactNode {
         <Field label={t('rp.player.persona')}>
           <textarea value={draft.userPersona} onChange={event => patch({ userPersona: event.target.value })} />
         </Field>
+        <div className="rp-field">
+          <button
+            className={`rp-btn${draft.allowFileTools ? ' rp-on' : ''}`}
+            title={t('rp.player.fileTools.hint')}
+            onClick={() => patch({ allowFileTools: !draft.allowFileTools })}
+          >
+            {t('rp.player.fileTools')}
+            {draft.allowFileTools ? t('rp.player.fileTools.on') : t('rp.player.fileTools.off')}
+          </button>
+          <span className="rp-note">{t('rp.player.fileTools.hint')}</span>
+        </div>
       </div>
 
       <div>
