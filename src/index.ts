@@ -10,9 +10,10 @@ import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { RoleplayService } from './service.ts'
 import { registerRoutes } from './http.ts'
 import { materializePresets, type PresetLocale } from './presets.ts'
+import { GLOBAL_IMAGE_TOOL_NAME, registerImageTool } from './image-tool.ts'
 
 export const name = 'roleplay'
-export const inject = ['settings', 'storageDomain', 'webServer']
+export const inject = ['settings', 'storageDomain', 'webServer', 'tools']
 
 export interface Config {
   /** Directory holding avatars and generated images (default: <dshHome>/roleplay). */
@@ -67,10 +68,45 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     }
   }
   await writePresets()
+
+  // ── image tool outside role-play ──
+  // Registered from this UNSCOPED host context, so it lands on the tools
+  // service's GLOBAL layer and every session (standard/code/…) sees it. The
+  // deliberately unusual name avoids same-layer collisions with other
+  // plugins' `generate_image`; role-play / forge presets deny it (agent.ts).
+  // The tool catalog is recomputed per request, so toggling takes effect for
+  // existing sessions from their next message.
+  let disposeGlobalImageTool: (() => void) | undefined
+  const syncGlobalImageTool = () => {
+    const enabled = service.settings.get().allowImageToolOutsideRoleplay
+    if (enabled && !disposeGlobalImageTool) {
+      if (ctx.tools.get(GLOBAL_IMAGE_TOOL_NAME) !== undefined) {
+        ctx.logger.warn('global tool "%s" already exists (another plugin?); leaving the outside-role-play image tool unregistered', GLOBAL_IMAGE_TOOL_NAME)
+        return
+      }
+      try {
+        disposeGlobalImageTool = registerImageTool(ctx, {
+          name: GLOBAL_IMAGE_TOOL_NAME,
+          background: true,
+          uploadReference: true,
+          fileReference: true,
+          flavor: 'generic',
+        })
+      } catch (error) {
+        ctx.logger.warn('failed to register the outside-role-play image tool: %s', error)
+      }
+    } else if (!enabled && disposeGlobalImageTool) {
+      disposeGlobalImageTool()
+      disposeGlobalImageTool = undefined
+    }
+  }
+  syncGlobalImageTool()
+
   // Keep the preset display text in the UI language, and re-materialize the
   // role-play composition whenever a risk toggle changes.
   ctx.on('settings/updated', ns => {
     if (ns === LOCALE_NS || ns === ROLEPLAY_NS) void writePresets()
+    if (ns === ROLEPLAY_NS) syncGlobalImageTool()
   })
   // The locale namespace may register after this plugin loads, in which case
   // the first write above fell back to Chinese. Poll briefly for the

@@ -144,6 +144,12 @@ export function RoleplaySettingsSection(): ReactNode {
 
       <div>
         <h4>{t('rp.image.heading')}{providerLabel}</h4>
+        <RiskToggle
+          label={t('rp.image.allowOutside')}
+          hint={t('rp.image.allowOutsideHint')}
+          value={draft.allowImageToolOutsideRoleplay}
+          onToggle={() => patch({ allowImageToolOutsideRoleplay: !draft.allowImageToolOutsideRoleplay })}
+        />
         <Field label={t('rp.image.provider')}>
           <select value={draft.imageProvider} onChange={event => patch({ imageProvider: event.target.value as Draft['imageProvider'] })}>
             <option value="none">{t('rp.image.none')}</option>

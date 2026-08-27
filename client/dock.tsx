@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom'
 import { api, stampedUrl, type CardSummary, type ReferenceMode, type RegexScriptValue, type SessionState } from './api.ts'
 import { subscribeWorkspaces, takeResend, workspaceOfSession } from './runtime.ts'
 import { colorizeProse, compileCardRules, replaceMacros, startProseHighlighter, type CardColorRule } from './colorize.tsx'
+import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useT, tf } from './i18n.ts'
 
 interface DockProps {
@@ -333,9 +334,11 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   // the question card owns text input until it settles).
   const questionBar = holder ? createPortal(
     <div className="rp-dock">
-      <div className="rp-dock-row">
+      <div className="rp-dock-row rp-dock-row-oneline">
         <Avatar url={boundAvatar} name={bound.name} />
-        <span className="rp-name">{bound.name}</span>
+        <Tooltip label={bound.name} side="bottom">
+          <span className="rp-name">{bound.name}</span>
+        </Tooltip>
         <span className="rp-muted">{t('rp.dock.answering')}</span>
         <span className="rp-spacer" />
         {toggles}
@@ -347,9 +350,11 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   return (
     <>
       <div className="rp-dock">
-        <div className="rp-dock-row">
+        <div className="rp-dock-row rp-dock-row-oneline">
           <Avatar url={boundAvatar} name={bound.name} />
-          <span className="rp-name">{bound.name}</span>
+          <Tooltip label={bound.name} side="bottom">
+            <span className="rp-name">{bound.name}</span>
+          </Tooltip>
           {isForge ? <span className="rp-muted">{t('rp.dock.forge.editing')}</span> : null}
           <span className="rp-spacer" />
           {toggles}

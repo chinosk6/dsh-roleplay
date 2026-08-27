@@ -5,6 +5,8 @@
  * `inject` so the bundle still loads (and role-play mode keeps working) on a
  * host without the attachment feature.
  */
+import { readFile } from 'node:fs/promises'
+import { isAbsolute } from 'node:path'
 import { PNG } from 'pngjs'
 import { decode as decodeJpeg } from 'jpeg-js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -40,6 +42,38 @@ function toPngBytes(data: Uint8Array, mediaType: string): Buffer {
     return PNG.sync.write(png)
   }
   throw new Error(`暂不支持 ${mediaType} 格式的上传图片，请告知用户转成 PNG 或 JPEG 后重新上传`)
+}
+
+/** Reference files larger than this are refused before decoding. */
+const MAX_LOCAL_IMAGE_BYTES = 32 * 1024 * 1024
+
+/**
+ * Resolve a local image file (PNG/JPEG, detected by magic bytes) to PNG bytes
+ * for the generation-reference path of the global image tool. Requires an
+ * absolute path: the host process cwd is unrelated to the conversation, so a
+ * relative path would resolve somewhere the user never meant.
+ */
+export async function resolveLocalImagePng(path: string): Promise<Buffer> {
+  const trimmed = path.trim()
+  if (trimmed === '') throw new Error('参考图路径为空')
+  if (!isAbsolute(trimmed)) throw new Error(`参考图路径必须是绝对路径（收到：${trimmed}）`)
+  let data: Buffer
+  try {
+    data = await readFile(trimmed)
+  } catch (error) {
+    throw new Error(`读取参考图文件失败：${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (data.byteLength > MAX_LOCAL_IMAGE_BYTES) {
+    throw new Error(`参考图文件过大（${Math.round(data.byteLength / 1024 / 1024)}MB，上限 32MB）`)
+  }
+  // Detect by content, not extension: PNG \x89PNG…, JPEG \xFF\xD8\xFF.
+  if (data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) {
+    return toPngBytes(data, 'image/png')
+  }
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
+    return toPngBytes(data, 'image/jpeg')
+  }
+  throw new Error('参考图文件不是 PNG 或 JPEG 图片（按文件内容判断）。请告知用户转成 PNG/JPEG 后重试')
 }
 
 /**

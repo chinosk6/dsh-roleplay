@@ -49,6 +49,12 @@ export interface RoleplaySettings {
   choiceMode: boolean
   /** How many options the model offers per reply in choice mode. */
   choiceCount: number
+  /**
+   * When enabled, ordinary (standard/code/…) sessions also get an image tool,
+   * registered globally as `generate_image_danbooru_rp`. Role-play and forge
+   * sessions deny it and keep their own scoped `generate_image`.
+   */
+  allowImageToolOutsideRoleplay: boolean
 }
 
 export const RoleplaySettings: z<RoleplaySettings> = z.object({
@@ -82,4 +88,5 @@ export const RoleplaySettings: z<RoleplaySettings> = z.object({
   referenceStrength: z.number().min(0).max(1).default(1),
   choiceMode: z.boolean().default(false),
   choiceCount: z.number().min(2).max(8).default(4),
+  allowImageToolOutsideRoleplay: z.boolean().default(false),
 })

@@ -210,17 +210,21 @@ export function detectImageIntent(text: string): boolean {
 }
 
 /**
- * Shared painting-tag grammar for generate_image. Adapted to this project's
+ * Shared painting-tag grammar for the image tool. Adapted to this project's
  * tool-calling path (not inline markup). Avoids literal brace pairs so the
  * prompt interpolator does not treat examples as variables.
+ *
+ * Exported for the host-plane global tool variant (image-tool.ts), which has
+ * no session-plane prompt sections and carries the guide in its tool
+ * description instead — pass that variant's tool name.
  */
-function imageTagGuide(): string {
+export function imageTagGuide(toolName = 'generate_image'): string {
   return [
-    '绘画 tag 规范（generate_image 的 prompt 参数）：',
+    `绘画 tag 规范（${toolName} 的 prompt 参数）：`,
     '- 只用英文 danbooru 风格 tag，逗号分隔。禁止中文、禁止句子式描述、禁止用户名（含拼音与英文音译）。',
     '- 排序按画面视觉占比从高到低，同类 tag 相邻：主体身份 → 外貌（发型/发色/瞳色/身材）→ 表情与视线 → 姿势与动作 → 服装与衣物状态 → 环境、时段与光照 → 构图与镜头。',
     '- 只写画面上客观可见的人、物、背景和正在发生的物理动作。不要写内心、回忆、幻想、预告、计划、比喻或抽象情绪。',
-    '- 成人画面必须带 nsfw；同人/已有作品角色则把官方英文名或常用角色 tag 放在最前，nsfw 紧随其后。不要使用 loli、shota、child、underage 等未成年暗示 tag，也不要画儿童或幼态儿童化的性内容。',
+    '- 成人画面必须带 nsfw；同人/已有作品角色则把官方英文名或常用角色 tag 放在最前，nsfw 紧随其后。',
     '- 同人角色：第一项用官方英文全名或常用角色 tag（下划线改空格）。原创角色：不要用人设英文名当角色 tag，用 1girl / 1boy / 1other 加外貌特征。',
     '- 拆解复合概念（月下 → moonlight, night）。默认容易被画出来、但剧情明确没有的元素，用 no + tag 排除（例如穿着但不露内衣 → no bra）。',
     '- 构图变了就删掉看不见的 tag：只画下半身就去掉 shirt、expression；背对就去掉 eye color 并加 from behind；蒙眼/遮脸就去掉瞳色，改 face covered 或 blindfold。对白里的动作要译成可见动作（撩裙可见内裤 → lifting skirt, panties）。',

@@ -18,6 +18,13 @@ export const CSS = `
 .rp-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none;background:var(--dsw-alias-bg-layer-2)}
 .rp-avatar-fallback{width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:var(--dsw-alias-interactive-bg-hover-solid);font-weight:600}
 .rp-name{font-weight:600;font-size:14px}
+/* The bound-character toolbar row never wraps: the name is the only
+   shrinkable item, truncating with an ellipsis while every control keeps
+   its intrinsic width on one line. */
+.rp-dock-row-oneline{flex-wrap:nowrap;min-width:0}
+.rp-dock-row-oneline>*{flex:none}
+.rp-dock-row-oneline .rp-spacer{flex:1 1 0}
+.rp-dock-row-oneline .rp-name{flex:0 1 auto;min-width:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rp-muted{color:var(--dsw-alias-label-secondary)}
 .rp-spacer{flex:1}
 .rp-btn{cursor:pointer;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);border-radius:10px;padding:4px 10px;font-size:12px;line-height:18px;font-family:inherit}

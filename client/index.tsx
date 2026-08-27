@@ -70,6 +70,8 @@ export function apply(ctx: ClientContext): void {
 
   ctx.slots.inject('tool.call.toolview', () => [
     ctx.slots.register({ name: 'tool.call.toolview', key: 'generate_image' }, GenerateImageView as never),
+    // The host-plane global variant (ordinary sessions) renders identically.
+    ctx.slots.register({ name: 'tool.call.toolview', key: 'generate_image_danbooru_rp' }, GenerateImageView as never),
     ctx.slots.register({ name: 'tool.call.toolview', key: 'save_character_card' }, SaveCardView as never),
   ])
 

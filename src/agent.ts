@@ -28,6 +28,7 @@ import {
   unboundHint,
 } from './prompts.ts'
 import { resolveUploadedImagePng } from './uploads.ts'
+import { GLOBAL_IMAGE_TOOL_NAME, registerImageTool } from './image-tool.ts'
 import type {} from './service.ts'
 
 export const name = 'roleplay-agent'
@@ -95,6 +96,10 @@ function lastUserText(agent: Agent | undefined): string {
 export function apply(ctx: Context, config: Config): void {
   const service = () => ctx.roleplay
 
+  // Both modes have their own scoped generate_image; the host-plane global
+  // variant would only confuse the model with a second image tool.
+  blockGlobalImageTool(ctx)
+
   if (config.mode === 'forge') {
     ctx.systemPrompt.variable('user_macro', () => '{{user}}')
     ctx.systemPrompt.variable('char_macro', () => '{{char}}')
@@ -116,7 +121,7 @@ export function apply(ctx: Context, config: Config): void {
       },
     })
     registerForgeTools(ctx)
-    registerImageTool(ctx, false, true)
+    registerImageTool(ctx, { background: false, uploadReference: true, avatarReference: true })
     return
   }
 
@@ -267,98 +272,42 @@ export function apply(ctx: Context, config: Config): void {
     }))
   })
 
-  registerImageTool(ctx, true)
+  registerImageTool(ctx, { background: true })
 }
 
 /**
- * @param background - role-play mode: the tool returns as soon as the tasks
- * are queued so the story keeps streaming while images render (the client
- * polls readiness). Forge mode keeps `false`: an avatar id must exist on disk
- * before save_character_card copies it.
- * @param uploadReference - forge mode only: adds the `reference_upload_index`
- * parameter that turns a chat-uploaded image into the generation reference.
- * Role-play mode keeps `false`, leaving its tool schema and behavior untouched.
+ * Deny the host-plane global image tool for this preset's sessions, so a
+ * role-play / forge model only ever sees its own scoped `generate_image`.
+ *
+ * `tools.restrict()` accepts only names that are KNOWN GLOBAL tools at call
+ * time, and the global registration comes and goes with the settings toggle —
+ * so the denial follows the registry through the `tools/change` event instead
+ * of being registered once at preset load.
  */
-function registerImageTool(ctx: Context, background: boolean, uploadReference = false): void {
-  ctx.tools.register(defineTool({
-    name: 'generate_image',
-    description:
-      '为当前场景生成插图。prompt 使用英文 danbooru 风格 tag（逗号分隔）：主体身份、外貌、表情姿势、动作、服装、环境光照、构图镜头。成人画面带 nsfw；用户在场用 pov、不要画用户的脸。生成的图片会直接展示给用户。'
-      + (uploadReference
-        ? '若用户上传了图片并希望以其为参考（画风、人物特征等），传 reference_upload_index 指定用哪一张；若用户希望以某张角色卡当前的头像为参考（如"以现在的头像为参考换头像"），传 reference_avatar_card_id。用户没有参考意图时都不要传。'
-        : ''),
-    parameters: {
-      prompt: { type: 'string', required: true, description: 'English danbooru-style tags, comma separated' },
-      count: { type: 'number', description: 'Number of images (1-6); omit to use the configured default. Pass 1 when interleaving several illustrations between paragraphs' },
-      ...(uploadReference
-        ? {
-            reference_upload_index: {
-              type: 'number' as const,
-              description: '以用户在本会话上传的第 N 张图片为生成参考图：按上传顺序 1 为第一张，-1 为最新一张。仅支持 PNG/JPEG 上传图',
-            },
-            reference_avatar_card_id: {
-              type: 'string' as const,
-              description: '以该 card_id 对应角色卡的当前头像为生成参考图。与 reference_upload_index 二选一（同时传以上传图为准）',
-            },
-          }
-        : {}),
-    },
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          images: {
-            type: 'array',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                id: { type: 'string', required: true },
-                url: { type: 'string', required: true },
-                width: { type: 'number' },
-                height: { type: 'number' },
-              },
-            },
-            required: true,
-          },
-        },
-      },
-      render: (_args, value) => [{
-        type: 'text',
-        text: background
-          ? `已安排 ${value.images.length} 张插图在后台生成，完成后会自动展示给用户。请立即继续正文剧情：不要等待生成、不要提及生成过程、不要在回复中粘贴图片链接。`
-          : [
-              `已生成 ${value.images.length} 张图片并直接展示给用户：`,
-              ...value.images.map((image, index) => `第 ${index + 1} 张 image_id: ${image.id}`),
-              '需要设为头像时，把对应 image_id 作为 avatar_image_id 传给 save_character_card。不要在回复中粘贴图片链接。',
-            ].join('\n'),
-      }],
-      presentationMeta: (_args, value) => ({ images: value.images }),
-    },
-    isConcurrencySafe: () => false,
-    async execute(args, exec) {
-      const agentId = exec.agent ? String(exec.agent.id) : undefined
-      const binding = agentId ? ctx.roleplay.getBinding(agentId) : undefined
-      const count = args.count ?? binding?.imageCount ?? ctx.roleplay.settings.get().imageCount
-      const extra = args as { reference_upload_index?: number; reference_avatar_card_id?: string }
-      let reference: Buffer | undefined
-      if (uploadReference && extra.reference_upload_index !== undefined) {
-        reference = await resolveUploadedImagePng(ctx, exec.agent, extra.reference_upload_index)
-      } else if (uploadReference && extra.reference_avatar_card_id) {
-        reference = await ctx.roleplay.cardAvatarPng(extra.reference_avatar_card_id, binding?.workspacePath)
+function blockGlobalImageTool(ctx: Context): void {
+  let lift: (() => void) | undefined
+  let syncing = false
+  const sync = () => {
+    // restrict()/lift() mutate the layers and re-emit tools/change; the outer
+    // call finishes the state change, so the nested notification is a no-op.
+    if (syncing) return
+    syncing = true
+    try {
+      const present = ctx.tools.get(GLOBAL_IMAGE_TOOL_NAME) !== undefined
+      if (present && !lift) {
+        lift = ctx.tools.restrict({ deny: [GLOBAL_IMAGE_TOOL_NAME] })
+      } else if (!present && lift) {
+        lift()
+        lift = undefined
       }
-      const images = await ctx.roleplay.generateImages(
-        args.prompt,
-        count,
-        background ? undefined : exec.signal,
-        agentId,
-        !background,
-        reference,
-      )
-      return { images }
-    },
-  }))
+    } catch (error) {
+      ctx.logger.warn('failed to sync the %s denial: %s', GLOBAL_IMAGE_TOOL_NAME, error)
+    } finally {
+      syncing = false
+    }
+  }
+  sync()
+  ctx.on('tools/change', sync)
 }
 
 function registerForgeTools(ctx: Context): void {

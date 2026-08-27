@@ -117,6 +117,7 @@ export interface RoleplaySettingsValue {
   referenceStrength: number
   choiceMode: boolean
   choiceCount: number
+  allowImageToolOutsideRoleplay: boolean
 }
 
 export interface ErpPoints {
