@@ -64,8 +64,8 @@ function normalizeLoreEntry(raw: unknown): LoreEntry | undefined {
     useRegex: entry.useRegex === true || entry.use_regex === true,
     constant: entry.constant === true,
     position: normalizePosition(entry.position),
-    order: typeof entry.order === 'number' ? entry.order
-      : typeof entry.insertion_order === 'number' ? entry.insertion_order : 100,
+    order: typeof entry.order === 'number' ? Math.floor(entry.order)
+      : typeof entry.insertion_order === 'number' ? Math.floor(entry.insertion_order) : 100,
     depth: typeof entry.depth === 'number' && entry.depth >= 0 ? Math.floor(entry.depth) : 4,
     scanDepth: typeof entry.scanDepth === 'number' && entry.scanDepth >= 0 ? Math.floor(entry.scanDepth)
       : typeof entry.scan_depth === 'number' && entry.scan_depth >= 0 ? Math.floor(entry.scan_depth) : 0,
@@ -91,7 +91,7 @@ function normalizeRegexScript(raw: unknown): RegexScript | undefined {
   if (!find) return undefined
   const disabled = script.disabled === true || script.enabled === false
   const placement = Array.isArray(script.placement)
-    ? script.placement.filter((value): value is number => typeof value === 'number')
+    ? script.placement.filter((value): value is number => typeof value === 'number' && Number.isInteger(value))
     : []
   return RegexScript.parse({
     name: asString(script.scriptName) || asString(script.name),

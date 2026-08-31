@@ -245,11 +245,11 @@ export const api = {
     }),
   imageStates: (ids: string[], ws?: string) =>
     request<{ states: Record<string, ImageGenState> }>(withWs(`/images/state?ids=${ids.map(encodeURIComponent).join(',')}`, ws)),
-  regenerateImages: (ids: string[], ws?: string) =>
+  regenerateImages: (ids: string[], ws?: string, sessionId?: string) =>
     request<{ regenerated: string[] }>(withWs('/images/regenerate', ws), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids }),
+      body: JSON.stringify({ ids, sessionId }),
     }),
   probeWorkspaceFolder: (ws: string, sub: string) =>
     request<{ exists: boolean }>(withWs(`/workspace/probe?sub=${encodeURIComponent(sub)}`, ws)),

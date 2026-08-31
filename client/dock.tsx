@@ -329,9 +329,31 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     </>
   ) : null
 
+  const stagedInstruction = !isForge ? (
+    <StagedInstruction
+      sessionId={sessionId}
+      staged={state.binding?.pendingInstruction ?? ''}
+      reload={reload}
+    />
+  ) : null
+  const continueButton = !isForge
+    ? <button className="rp-btn" onClick={() => { inputActions.setDraft('（继续）'); inputActions.submit() }}>{t('rp.dock.continue')}</button>
+    : null
+  const switchButton = (
+    <button
+      className="rp-btn"
+      onClick={() => {
+        void api.updateSession(sessionId, { characterId: null }).then(() => { setCards(null); reload() }).catch(() => {})
+      }}
+    >
+      {isForge ? t('rp.dock.switchCard') : t('rp.dock.switchChar')}
+    </button>
+  )
+
   // Compact bar shown while the composer is taken over by a pending
-  // interaction: identity + API-backed toggles only (no send-path buttons —
-  // the question card owns text input until it settles).
+  // interaction (e.g. the choice-mode question card): every regular control
+  // stays available except "generate an image now" — that one rides a fresh
+  // user message, which the pending question owns until it settles.
   const questionBar = holder ? createPortal(
     <div className="rp-dock">
       <div className="rp-dock-row rp-dock-row-oneline">
@@ -342,6 +364,9 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
         <span className="rp-muted">{t('rp.dock.answering')}</span>
         <span className="rp-spacer" />
         {toggles}
+        {stagedInstruction}
+        {continueButton}
+        {switchButton}
       </div>
     </div>,
     holder,
@@ -359,22 +384,9 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           <span className="rp-spacer" />
           {toggles}
           {!isForge ? <button className="rp-btn" onClick={() => sendInstruction('请调用 generate_image 为当前场景生成插图')}>{t('rp.dock.imageNow')}</button> : null}
-          {!isForge ? (
-            <StagedInstruction
-              sessionId={sessionId}
-              staged={state.binding?.pendingInstruction ?? ''}
-              reload={reload}
-            />
-          ) : null}
-          {!isForge ? <button className="rp-btn" onClick={() => { inputActions.setDraft('（继续）'); inputActions.submit() }}>{t('rp.dock.continue')}</button> : null}
-          <button
-            className="rp-btn"
-            onClick={() => {
-              void api.updateSession(sessionId, { characterId: null }).then(() => { setCards(null); reload() }).catch(() => {})
-            }}
-          >
-            {isForge ? t('rp.dock.switchCard') : t('rp.dock.switchChar')}
-          </button>
+          {stagedInstruction}
+          {continueButton}
+          {switchButton}
         </div>
         {blank && bound.firstMessage ? <OpeningInline card={bound} rules={cardRules} /> : null}
         {error ? <span className="rp-error">{error}</span> : null}

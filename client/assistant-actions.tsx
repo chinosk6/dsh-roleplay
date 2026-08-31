@@ -83,7 +83,7 @@ function deriveContext(snapshot: SnapshotLike, messageId: string): {
 
 export function RoleplayAssistantActions(props: ActionProps): ReactNode {
   const t = useT()
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<false | 'reply' | 'images'>(false)
   const preset = props.useSessions && props.sessionId
     ? (props.useSessions(state => state.byId[props.sessionId as string]?.agentPreset) as string | undefined)
     : undefined
@@ -92,7 +92,7 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
 
   const context = deriveContext(snapshot, props.messageId)
   if (!context) return null
-  const canRegenerate = context.prevTurnEnd !== undefined && context.userText.trim() !== '' && !snapshot.running && !busy
+  const canRegenerate = context.prevTurnEnd !== undefined && context.userText.trim() !== '' && !snapshot.running && busy === false
 
   return (
     <>
@@ -102,29 +102,33 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
           className="rp-msg-action"
           disabled={!canRegenerate}
           onClick={() => {
-            setBusy(true)
+            setBusy('reply')
             rewindAndResend(props.sessionId as string, context.prevTurnEnd as number, context.userText)
               .catch(() => setBusy(false))
           }}
         >
-          <IconRefreshOutline16 size={16} />
+          {busy === 'reply' ? <span className="rp-imgspin" /> : <IconRefreshOutline16 size={16} />}
         </button>
       </Tooltip>
       {context.imageIds.length > 0 ? (
-        <Tooltip label={t('rp.regen.images')} side="bottom">
+        <Tooltip label={busy === 'images' ? t('rp.regen.imagesBusy') : t('rp.regen.images')} side="bottom">
           <button
             type="button"
             className="rp-msg-action"
-            disabled={busy}
+            disabled={busy !== false}
             onClick={() => {
-              setBusy(true)
-              api.regenerateImages(context.imageIds, props.sessionId ? workspaceOfSession(props.sessionId)?.path : undefined)
+              setBusy('images')
+              api.regenerateImages(
+                context.imageIds,
+                props.sessionId ? workspaceOfSession(props.sessionId)?.path : undefined,
+                props.sessionId,
+              )
                 .then(result => bumpImageRevs(result.regenerated))
                 .catch(() => {})
                 .finally(() => setBusy(false))
             }}
           >
-            <IconEnhanceOutline16 size={16} />
+            {busy === 'images' ? <span className="rp-imgspin" /> : <IconEnhanceOutline16 size={16} />}
           </button>
         </Tooltip>
       ) : null}

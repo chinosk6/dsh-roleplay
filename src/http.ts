@@ -276,9 +276,10 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
     return
   }
   if (path === '/images/regenerate' && method === 'POST') {
-    const body = JSON.parse((await readBody(req)).toString('utf8')) as { ids?: string[] }
+    const body = JSON.parse((await readBody(req)).toString('utf8')) as { ids?: string[]; sessionId?: string }
     const ids = Array.isArray(body.ids) ? body.ids.filter(id => typeof id === 'string') : []
-    sendJson(res, 200, { regenerated: await service.regenerateImages(ids, undefined, ws) })
+    const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined
+    sendJson(res, 200, { regenerated: await service.regenerateImages(ids, undefined, ws, sessionId) })
     return
   }
   if (path === '/images/move' && method === 'POST') {

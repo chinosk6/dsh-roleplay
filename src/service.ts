@@ -943,14 +943,17 @@ export class RoleplayService extends Service {
   /**
    * Re-run generation for stored images with their original full prompt and
    * dimensions, overwriting the same file ids so chat cards keep working.
+   * @param agentId - caller session id; when present the session's reference
+   * settings apply, exactly as they would for a fresh generation.
    */
-  async regenerateImages(ids: string[], signal?: AbortSignal, wsPath?: string): Promise<string[]> {
+  async regenerateImages(ids: string[], signal?: AbortSignal, wsPath?: string, agentId?: string): Promise<string[]> {
     const config = this.settings.get()
     if (config.imageProvider === 'none') throw new Error('未启用生图后端：请在「设置 → 角色扮演」中选择并配置生图接口')
     const provider = this.providers.find(p => p.id === config.imageProvider)
     if (!provider || !provider.available()) {
       throw new Error(`生图后端 ${config.imageProvider} 未配置完整（缺少地址或密钥）`)
     }
+    const reference = await this.referenceImageFor(agentId)
     const fallback = dimensionsOf(config.imageSize)
     // Nearest ratio-keyword for a stored width/height, for ratio-based backends.
     const aspectFor = (width: number, height: number): string => {
@@ -973,6 +976,8 @@ export class RoleplayService extends Service {
         height,
         aspect: aspectFor(width, height),
         signal,
+        reference,
+        referenceStrength: config.referenceStrength,
       })
       const bytes = (await (this.generationChain = this.generationChain.then(run, run))) as Buffer
       if (located.scope === 'workspace' && located.root) {
