@@ -13,14 +13,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from 'react-dom'
 import { api, stampedUrl, type CardSummary, type ReferenceMode, type RegexScriptValue, type SessionState } from './api.ts'
 import { subscribeWorkspaces, takeResend, workspaceOfSession } from './runtime.ts'
+import { useAgentPreset, useComposerTakenOver, useSessionBlank, useSessionRunning, type SessionSlotProps } from './compat.ts'
 import { colorizeProse, compileCardRules, replaceMacros, startProseHighlighter, type CardColorRule } from './colorize.tsx'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useT, tf } from './i18n.ts'
 
-interface DockProps {
+interface DockProps extends SessionSlotProps {
   sessionId: string
-  useSessions: (selector: (state: { byId: Record<string, { agentPreset?: string; blank: boolean }> }) => unknown) => unknown
-  useSession?: (selector: (snapshot: { pending: readonly unknown[]; running: boolean }) => unknown) => unknown
   inputActions: { setDraft(text: string): void; submit(): void }
 }
 
@@ -36,10 +35,10 @@ function usePopover(): [boolean, () => void, () => void] {
 
 export function RoleplayDock(props: DockProps): React.ReactNode {
   const { sessionId, inputActions } = props
-  const preset = props.useSessions(state => state.byId[sessionId]?.agentPreset) as string | undefined
-  const blank = props.useSessions(state => state.byId[sessionId]?.blank ?? false) as boolean
-  const pending = props.useSession ? ((props.useSession(s => s.pending.length > 0) as boolean) ?? false) : false
-  const running = props.useSession ? ((props.useSession(s => s.running) as boolean) ?? false) : false
+  const preset = useAgentPreset(props, sessionId)
+  const blank = useSessionBlank(props, sessionId)
+  const pending = useComposerTakenOver(props, sessionId)
+  const running = useSessionRunning(props)
 
   // Scope flag for the role-play bubble CSS (styles.ts): set only while a
   // role-play session is current, removed on unmount/session switch, so the

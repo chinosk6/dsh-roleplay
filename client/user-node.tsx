@@ -19,25 +19,14 @@ import {
   Tooltip,
   writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { nativeChatNodeComponent, rewindAndResend } from './runtime.ts'
+import { nativeKeyedComponent, rewindAndResend } from './runtime.ts'
+import { turnOf, useAgentPreset, useChatFlow, useSessionRunning, type SessionSlotProps } from './compat.ts'
 import { useT } from './i18n.ts'
 
-interface TurnLocationLike {
-  turn: number
-}
-
-interface SnapshotLike {
-  turnEnds: ReadonlyMap<number, number>
-  running: boolean
-}
-
-interface UserNodeProps {
-  sessionId?: string
-  useSessions?: (selector: (state: { byId: Record<string, { agentPreset?: string }> }) => unknown) => unknown
-  useSession?: (selector: (snapshot: SnapshotLike) => unknown) => unknown
+interface UserNodeProps extends SessionSlotProps {
   node?: {
     data?: { content?: readonly { type?: string; text?: string }[] }
-    location?: { kind?: string; turn?: TurnLocationLike }
+    location?: { kind?: string; turn?: { turn: number } }
   }
   [extra: string]: unknown
 }
@@ -68,19 +57,16 @@ export function RoleplayUserNode(props: UserNodeProps): ReactNode {
 
   // The selector hooks are framework-supplied and present for every render of
   // this session-scope entry, so the optional calls keep a stable hook order.
-  const preset = props.useSessions
-    ? (props.useSessions(state => state.byId[(props.sessionId as string) ?? '']?.agentPreset) as string | undefined)
-    : undefined
-  const snapshot = props.useSession ? (props.useSession(s => s) as SnapshotLike) : undefined
+  const preset = useAgentPreset(props, props.sessionId)
+  const flow = useChatFlow(props)
+  const running = useSessionRunning(props)
   const content = props.node?.data?.content ?? []
   const { text, textOnly } = textOf(content)
-  const location = props.node?.location
-  const turnNumber = location && (location.kind === 'turn' || location.kind === 'step') ? location.turn?.turn : undefined
-  const prevTurnEnd = turnNumber !== undefined ? snapshot?.turnEnds.get(turnNumber - 1) : undefined
-  const running = snapshot?.running ?? false
+  const turnNumber = turnOf(props.node)
+  const prevTurnEnd = turnNumber !== undefined ? flow?.turnEnds.get(turnNumber - 1) : undefined
 
   if (preset !== 'roleplay' || !textOnly) {
-    const native = nativeChatNodeComponent('user', RoleplayUserNode)
+    const native = nativeKeyedComponent('conversation.chat.node', 'user', RoleplayUserNode)
     return native ? createElement(native as never, props as never) : null
   }
 

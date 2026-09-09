@@ -8,46 +8,24 @@ import { useState, type ReactNode } from 'react'
 import { IconEnhanceOutline16, IconRefreshOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api } from './api.ts'
 import { bumpImageRevs, rewindAndResend, workspaceOfSession } from './runtime.ts'
+import { turnOf, useAgentPreset, useChatFlow, useSessionRunning, type ChatFlow, type SessionSlotProps } from './compat.ts'
 import { useT } from './i18n.ts'
 
-interface ChatNodeLike {
-  kind?: string
-  location?: { kind?: string; turn?: { turn: number } }
-  data?: Record<string, unknown>
-}
-
-interface SnapshotLike {
-  chat: {
-    order: readonly string[]
-    nodes: { get(key: string): ChatNodeLike | undefined }
-  }
-  turnEnds: ReadonlyMap<number, number>
-  running: boolean
-}
-
-interface ActionProps {
+interface ActionProps extends SessionSlotProps {
   messageId?: string
-  sessionId?: string
-  useSession?: (selector: (snapshot: SnapshotLike) => unknown) => unknown
-  useSessions?: (selector: (state: { byId: Record<string, { agentPreset?: string }> }) => unknown) => unknown
   [extra: string]: unknown
 }
 
-function turnOf(node: ChatNodeLike): number | undefined {
-  const location = node.location
-  return location && (location.kind === 'turn' || location.kind === 'step') ? location.turn?.turn : undefined
-}
-
 /** Derive the acted-on turn, its opening user text, and its image ids. */
-function deriveContext(snapshot: SnapshotLike, messageId: string): {
+function deriveContext(flow: ChatFlow, messageId: string): {
   turn: number
   userText: string
   prevTurnEnd: number | undefined
   imageIds: string[]
 } | undefined {
   let turn: number | undefined
-  for (const key of snapshot.chat.order) {
-    const node = snapshot.chat.nodes.get(key)
+  for (const key of flow.order) {
+    const node = flow.node(key)
     if (node?.kind !== 'assistant-step') continue
     const finalNode = node.data?.finalNode as { messageId?: string } | undefined
     if (finalNode?.messageId === messageId) {
@@ -58,8 +36,8 @@ function deriveContext(snapshot: SnapshotLike, messageId: string): {
   if (turn === undefined) return undefined
   let userText = ''
   const imageIds: string[] = []
-  for (const key of snapshot.chat.order) {
-    const node = snapshot.chat.nodes.get(key)
+  for (const key of flow.order) {
+    const node = flow.node(key)
     if (!node || turnOf(node) !== turn) continue
     if (node.kind === 'user' && userText === '') {
       const content = (node.data?.content ?? []) as readonly { type?: string; text?: string }[]
@@ -78,21 +56,20 @@ function deriveContext(snapshot: SnapshotLike, messageId: string): {
       }
     }
   }
-  return { turn, userText, prevTurnEnd: snapshot.turnEnds.get(turn - 1), imageIds }
+  return { turn, userText, prevTurnEnd: flow.turnEnds.get(turn - 1), imageIds }
 }
 
 export function RoleplayAssistantActions(props: ActionProps): ReactNode {
   const t = useT()
   const [busy, setBusy] = useState<false | 'reply' | 'images'>(false)
-  const preset = props.useSessions && props.sessionId
-    ? (props.useSessions(state => state.byId[props.sessionId as string]?.agentPreset) as string | undefined)
-    : undefined
-  const snapshot = props.useSession ? (props.useSession(s => s) as SnapshotLike) : undefined
-  if (preset !== 'roleplay' || !snapshot || typeof props.messageId !== 'string') return null
+  const preset = useAgentPreset(props, props.sessionId)
+  const flow = useChatFlow(props)
+  const running = useSessionRunning(props)
+  if (preset !== 'roleplay' || !flow || typeof props.messageId !== 'string') return null
 
-  const context = deriveContext(snapshot, props.messageId)
+  const context = deriveContext(flow, props.messageId)
   if (!context) return null
-  const canRegenerate = context.prevTurnEnd !== undefined && context.userText.trim() !== '' && !snapshot.running && busy === false
+  const canRegenerate = context.prevTurnEnd !== undefined && context.userText.trim() !== '' && !running && busy === false
 
   return (
     <>

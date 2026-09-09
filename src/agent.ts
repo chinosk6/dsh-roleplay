@@ -10,6 +10,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { PERSONA_ORDER, PERSONA_SECTION, type AssembleContext } from '@deepseek-ai/dsh-system-prompt'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-tools'
 import {
   applyMacros,
@@ -91,6 +92,34 @@ function lastUserText(agent: Agent | undefined): string {
     // fall through
   }
   return ''
+}
+
+/**
+ * This session's event log.
+ *
+ * dsh 0.1.2 removed the `events` getter in favour of `snapshotEvents()` (a
+ * cached immutable range read over the same append-only log), so the plugin
+ * asks for whichever accessor the running harness has.
+ */
+function sessionEvents(session: Agent['session']): readonly SessionEvent[] {
+  const log = session as unknown as {
+    snapshotEvents?: () => readonly SessionEvent[]
+    events?: readonly SessionEvent[]
+  }
+  if (typeof log.snapshotEvents === 'function') return log.snapshotEvents()
+  return log.events ?? []
+}
+
+/** Whether the turn already offered its options through the native question tool. */
+function calledAskUserQuestion(agent: Agent, turn: number): boolean {
+  const events = sessionEvents(agent.session)
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (!event) continue
+    if (event.type === 'turn/start' && event.data.turn === turn) return false
+    if (event.type === 'tool/call' && event.data.turn === turn && event.data.name === 'ask_user_question') return true
+  }
+  return false
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -248,28 +277,33 @@ export function apply(ctx: Context, config: Config): void {
   // without having called ask_user_question is steered ONCE to produce the
   // options — the setting is a guarantee, not a suggestion the model may
   // forget. The steering runs one more step inside the same turn.
+  //
+  // The whole body is guarded: this hook runs INSIDE the turn, so anything it
+  // throws fails the turn itself. A missing safety net is what turned the
+  // removal of `session.events` in dsh 0.1.2 into "本轮运行失败 Cannot read
+  // properties of undefined (reading 'length')" on every choice-mode reply.
+  // Losing the steer degrades the guarantee to a prompt-level request; losing
+  // the turn loses the user's reply.
   const steeredTurn = new Map<string, number>()
   ctx.on('agent/turn-stopping', ({ agent, turn }) => {
-    const svc = service()
-    const binding = svc.getBinding(String(agent.id))
-    if (!(binding?.choiceMode ?? svc.settings.get().choiceMode)) return
-    const key = String(agent.id)
-    if (steeredTurn.get(key) === turn) return
-    const events = agent.session.events
-    for (let i = events.length - 1; i >= 0; i--) {
-      const event = events[i]
-      if (!event) continue
-      if (event.type === 'turn/start' && event.data.turn === turn) break
-      if (event.type === 'tool/call' && event.data.turn === turn && event.data.name === 'ask_user_question') return
+    try {
+      const svc = service()
+      const binding = svc.getBinding(String(agent.id))
+      if (!(binding?.choiceMode ?? svc.settings.get().choiceMode)) return
+      const key = String(agent.id)
+      if (steeredTurn.get(key) === turn) return
+      if (calledAskUserQuestion(agent, turn)) return
+      steeredTurn.set(key, turn)
+      agent.steer(createUserMessage({
+        content: [{
+          type: 'text',
+          text: '[系统指令: 本轮还没有给出行动选项。现在立即调用 ask_user_question 工具，给出本轮的下一步行动选项；不要重复或续写正文。]',
+        }],
+        source: { kind: 'plugin', plugin: 'dsh-roleplay' },
+      }))
+    } catch (error) {
+      ctx.logger.warn('choice-mode steering skipped: %s', error)
     }
-    steeredTurn.set(key, turn)
-    agent.steer(createUserMessage({
-      content: [{
-        type: 'text',
-        text: '[系统指令: 本轮还没有给出行动选项。现在立即调用 ask_user_question 工具，给出本轮的下一步行动选项；不要重复或续写正文。]',
-      }],
-      source: { kind: 'plugin', plugin: 'dsh-roleplay' },
-    }))
   })
 
   registerImageTool(ctx, { background: true })

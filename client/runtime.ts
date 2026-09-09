@@ -13,6 +13,11 @@ interface SessionsFace {
   open?(sessionId: string): void
   /** Older face spelling, kept as a fallback. */
   select?(sessionId: string): void
+  /** Session rows plus the current selection (both dsh generations expose it). */
+  list?: {
+    getSnapshot(): { current?: string | undefined }
+    subscribe(fn: () => void): () => void
+  }
 }
 
 interface WorkspaceRow {
@@ -67,32 +72,61 @@ export function workspaceOfSession(sessionId: string): WorkspaceInfo | undefined
 }
 
 /**
- * The most recently active workspace — the "current" one outside any session
- * context. Returns a REFERENCE-STABLE object while the workspace is unchanged
+ * The workspace the user is working in right now — the store target for the
+ * settings page, the gallery and the forge card editor.
+ *
+ * Resolution order: the workspace accounting the CURRENT session (the only
+ * answer dsh 0.1.2 still allows — its workspace snapshot dropped the
+ * `recentWorkspaceId` projection), then that projection where an older
+ * harness still publishes it, and only then the first registered workspace.
+ * Without the session step, 0.1.2 always fell through to that last resort and
+ * every store operation silently targeted the first workspace in the list.
+ *
+ * Returns a REFERENCE-STABLE object while the workspace is unchanged
  * (useSyncExternalStore snapshot contract).
  */
-let lastRecent: WorkspaceInfo | undefined
-export function recentWorkspace(): WorkspaceInfo | undefined {
+let lastCurrent: WorkspaceInfo | undefined
+export function currentWorkspace(): WorkspaceInfo | undefined {
   const state = workspacesFace?.list?.getSnapshot()
+  const openSessionId = sessionsFace?.list?.getSnapshot().current
   const row = state
-    ? (state.items.find(item => item.workspaceId === state.recentWorkspaceId) ?? state.items[0])
+    ? ((openSessionId !== undefined
+        ? state.items.find(item => item.sessionIds.includes(openSessionId))
+        : undefined)
+      ?? (state.recentWorkspaceId !== undefined
+        ? state.items.find(item => item.workspaceId === state.recentWorkspaceId)
+        : undefined)
+      ?? state.items[0])
     : undefined
   if (!row) {
-    lastRecent = undefined
-  } else if (!lastRecent || lastRecent.workspaceId !== row.workspaceId || lastRecent.path !== row.path || lastRecent.title !== row.title) {
-    lastRecent = { workspaceId: row.workspaceId, path: row.path, title: row.title }
+    lastCurrent = undefined
+  } else if (!lastCurrent || lastCurrent.workspaceId !== row.workspaceId || lastCurrent.path !== row.path || lastCurrent.title !== row.title) {
+    lastCurrent = { workspaceId: row.workspaceId, path: row.path, title: row.title }
   }
-  return lastRecent
+  return lastCurrent
 }
 
-/** Subscribe to workspace list changes (no-op unsubscriber without the feed). */
+/**
+ * Subscribe to everything {@link currentWorkspace} reads: the workspace list
+ * AND the session selection (switching conversations changes the answer).
+ */
 export function subscribeWorkspaces(fn: () => void): () => void {
-  return workspacesFace?.list?.subscribe(fn) ?? (() => {})
+  const stopWorkspaces = workspacesFace?.list?.subscribe(fn)
+  const stopSessions = sessionsFace?.list?.subscribe(fn)
+  return () => {
+    stopWorkspaces?.()
+    stopSessions?.()
+  }
 }
 
-/** The native (non-plugin) component registered for one keyed chat-node cell. */
-export function nativeChatNodeComponent(key: string, own: unknown): unknown {
-  const rows = slotsFace?.entries('conversation.chat.node') ?? []
+/**
+ * The native (non-plugin) component registered for one keyed slot cell, so a
+ * shadow that only wants to CHANGE some cases can hand the rest back
+ * untouched. Keyed shadowing is process-global; delegation is what keeps a
+ * global takeover inert wherever the plugin has nothing to add.
+ */
+export function nativeKeyedComponent(slot: string, key: string, own: unknown): unknown {
+  const rows = slotsFace?.entries(slot) ?? []
   const cell = rows
     .filter(row => row.options.key === key && row.component !== own)
     .sort((a, b) => (a.options.priority ?? 0) - (b.options.priority ?? 0))

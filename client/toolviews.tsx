@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { api } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
-import { bumpImageRevs, imageRev, imageUrlWithRev, recentWorkspace, subscribeImageRevs } from './runtime.ts'
+import { bumpImageRevs, imageRev, imageUrlWithRev, currentWorkspace, subscribeImageRevs } from './runtime.ts'
 import { ImageLightbox } from './lightbox.tsx'
 import { useT } from './i18n.ts'
 
@@ -269,7 +269,7 @@ export function SaveCardView({ block }: ToolViewProps): ReactNode {
         </span>
         <span className="rp-note">{t('rp.tool.cardHint')}</span>
       </div>
-      <CardEditor cardId={cardId} ws={recentWorkspace()?.path} />
+      <CardEditor cardId={cardId} ws={currentWorkspace()?.path} />
       <span className="rp-note">{t('rp.tool.cardManage')}</span>
     </div>
   )

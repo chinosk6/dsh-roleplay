@@ -4,7 +4,7 @@ import { IconQuestionOutline14, Tooltip } from '@deepseek-ai/dsh-client-ui-primi
 import { api, formatBytes, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type NovelAiPoints, type RoleplaySettingsValue, type StoreScope } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
-import { recentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
+import { currentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
 import { useT, tf } from './i18n.ts'
 
 type Draft = RoleplaySettingsValue
@@ -53,8 +53,8 @@ export function RoleplaySettingsSection(): ReactNode {
   /** Whether the image-gallery sub-page replaces the section body. */
   const [gallery, setGallery] = useState(false)
   const saveTimer = useRef<number | undefined>(undefined)
-  /** The "current" workspace (most recently active) — the workspace-store target. */
-  const ws = useSyncExternalStore(subscribeWorkspaces, recentWorkspace)
+  /** The workspace the open session belongs to — the workspace-store target. */
+  const ws = useSyncExternalStore(subscribeWorkspaces, currentWorkspace)
 
   useEffect(() => {
     api.settings()

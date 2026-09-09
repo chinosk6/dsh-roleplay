@@ -115,19 +115,86 @@ export const CSS = `
    the assistant flow item's box only (background/border/width) via the public
    data-chat-flow-kind attribute — the NATIVE renderers inside (markdown,
    Think rows, tool cards) keep their own typography and colors untouched. */
-body[data-rp-active="1"] [data-chat-flow-kind="assistant-step"]{width:fit-content;min-width:220px;max-width:min(620px,90%);background:var(--dsw-alias-bg-module-platform);border:1px solid var(--dsw-alias-border-l2);border-radius:4px 16px 16px 16px;padding:10px 14px;box-sizing:border-box}
+body[data-rp-active="1"] [data-chat-flow-kind="assistant-step"]{width:fit-content;min-width:220px;max-width:min(calc(var(--dsh-chat-content-width,748px)*.83),90%);background:var(--dsw-alias-bg-module-platform);border:1px solid var(--dsw-alias-border-l2);border-radius:4px 16px 16px 16px;padding:10px 14px;box-sizing:border-box}
+/* Two kinds of assistant-step are NOT story bubbles, so the chrome above is
+   taken back off them:
+   - a step that renders ONLY the Think row. Reasoning may arrive either as a
+     step of its own (when a tool call ends the step) or inline alongside the
+     prose of the answer, so "carries a Think row" is NOT the test — a step
+     with prose is a story bubble whether or not reasoning rides along, and
+     keying on the Think row alone stripped the box off real replies. The
+     test is "a Think row and no rendered paragraph": ReasoningRow puts its
+     text in a plain div, so only markdown prose contributes a <p>.
+   - a PROSE-LESS step folded into the turn-process disclosure:
+     hidden="until-found" skips only the CONTENTS, so the element keeps
+     painting its own border, background and padding — an empty 22px bubble
+     wedged between the collapsed disclosure and the next row. Folded steps
+     that DO carry prose keep their bubble: they are revealed just below.
+   Both arms out-specify the rule above (:not(:has(p)) adds a type selector,
+   [data-turn-process-hidden] an attribute), which is what lets them win. */
+body[data-rp-active="1"] [data-chat-flow-kind="assistant-step"]:has([data-variant="think"]):not(:has(p)),
+body[data-rp-active="1"] [data-chat-flow-kind="assistant-step"][data-turn-process-hidden]:not(:has(p)){width:auto;min-width:0;background:none;border:0;border-radius:0;padding:0}
+
+/* In role-play the "process" IS the story: the model writes a paragraph, draws
+   an illustration, writes the next paragraph. dsh calls every assistant
+   message but the LAST one of a turn process, so a collapsed turn showed only
+   its final paragraph and the player had to expand the disclosure to read the
+   scene. The prose ones come back out of the fold, exactly like the
+   illustrations; reasoning, context injections and every other tool call stay
+   folded, which is what the disclosure is actually for.
+   The column's sibling rule skips rows carrying the hidden attribute, so the
+   gap is restated here (and follows the token, so an illustration next door
+   still tightens it to 6px). */
+body[data-rp-active="1"] [data-chat-flow-kind="assistant-step"][data-turn-process-hidden]:has(p){content-visibility:visible;margin-top:var(--dsh-chat-flow-gap,16px)}
 
 /* Interleaved illustrations. generate_image flow nodes (marked .rp-genimg)
-   shed their card chrome and tuck between the surrounding story bubbles, so
-   paragraph/image/paragraph reads as ONE continuous message: negative margins
-   cancel most of the flow column's 16px gap (net 6px), and the step that
-   continues after an image loses its "new message" corner tail. Other tool
-   nodes (e.g. ask_user_question) keep the stock spacing. */
-body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg){margin-top:-10px}
-body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [data-chat-flow-kind="assistant-step"]{margin-top:-10px;border-radius:16px}
+   shed their card chrome and tuck against the surrounding story bubbles, so
+   paragraph/image/paragraph reads as ONE continuous message, and the step
+   that continues after an image loses its "new message" corner tail. Other
+   tool nodes (e.g. ask_user_question) keep the stock spacing.
+
+   The tuck rides the shipped --dsh-chat-flow-gap token — the variable the
+   chat column's own sibling rule reads — instead of a negative margin of our
+   own. That rule (.column > :not([hidden])… ~ :not([hidden])…) is far more
+   specific than anything scoped under body[data-rp-active], so a
+   margin-top here simply lost to it; and because it also SKIPS rows
+   carrying the hidden attribute, a -10px landed unopposed on illustrations
+   revealed out of the process fold — dragging them 10px OVER the row above
+   (the collapsed disclosure, a 系统提示词 divider, or the previous
+   illustration). Setting the token instead can only ever change the gap the
+   column itself computes, so no row can overlap its neighbour.
+
+   The + [hidden] + arm carries the tuck across the zero-height context row
+   dsh folds between an illustration and the answer it belongs to. */
+body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg),
+body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [data-chat-flow-kind],
+body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [hidden] + [data-chat-flow-kind]{--dsh-chat-flow-gap:6px}
+/* Revealed rows get no gap from the column rule at all (see above): restate it. */
+body[data-rp-active="1"] [data-chat-flow-kind="tool-call"][data-turn-process-hidden]:has(.rp-genimg){margin-top:6px}
+body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [data-chat-flow-kind="assistant-step"]{border-radius:16px}
 body[data-rp-active="1"] .rp-genimg{background:transparent;border:none;border-radius:0;padding:2px 0}
 body[data-rp-active="1"] .rp-genimg-images > .rp-toolcard-title{display:none}
 body[data-rp-active="1"] .rp-genimg .rp-imggrid{padding:0}
+
+/* dsh folds a completed turn's tool calls behind the "process" disclosure
+   (Settings ▸ 对话显示 ▸ Compact, the shipped default): the row stays in the
+   DOM carrying hidden="until-found", i.e. content-visibility:hidden. An
+   illustration — and the forge mode's card editor — is the turn's RESULT, not
+   its process, so those two plugin cards opt back out of the fold, while
+   everything else in the turn stays folded.
+   The flow gap is re-added by hand outside role-play: the shipped sibling
+   rule skips [hidden] rows, while role-play deliberately tucks the image
+   against the surrounding bubbles (negative margins above). */
+[data-chat-flow-kind="tool-call"][data-turn-process-hidden]:has(.rp-genimg,.rp-forge-result){content-visibility:visible}
+body:not([data-rp-active="1"]) [data-chat-flow-kind="tool-call"][data-turn-process-hidden]:has(.rp-genimg,.rp-forge-result){margin-top:var(--dsh-chat-flow-gap,16px)}
+
+/* Unanswered-question fallback card (see ask-question.tsx): the options of a
+   choice-mode question whose run was interrupted, offered as send buttons. */
+.rp-askcard{gap:10px}
+.rp-askblock{display:flex;flex-direction:column;gap:6px}
+.rp-askquestion{font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary)}
+.rp-askoptions{display:flex;flex-wrap:wrap;gap:6px}
+.rp-askoptions .rp-btn{text-align:left;white-space:normal;max-width:100%}
 
 /* Pending / failed image slots (background generation still running). */
 .rp-imgtile{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:220px;min-height:140px;padding:12px;box-sizing:border-box;border-radius:12px;border:1px dashed var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
@@ -139,7 +206,7 @@ body[data-rp-active="1"] .rp-genimg .rp-imggrid{padding:0}
    first bubble, prepended to the flow column via the [data-rp-opening]
    holder (blank sessions preview it inside the dock as .rp-greeting). */
 [data-rp-opening]{display:flex;width:100%}
-.rp-opening{width:fit-content;min-width:220px;max-width:min(620px,90%);background:var(--dsw-alias-bg-module-platform);border:1px solid var(--dsw-alias-border-l2);border-radius:4px 16px 16px 16px;padding:10px 14px;box-sizing:border-box}
+.rp-opening{width:fit-content;min-width:220px;max-width:min(calc(var(--dsh-chat-content-width,748px)*.83),90%);background:var(--dsw-alias-bg-module-platform);border:1px solid var(--dsw-alias-border-l2);border-radius:4px 16px 16px 16px;padding:10px 14px;box-sizing:border-box}
 .rp-opening-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .rp-opening-head .rp-avatar,.rp-opening-head .rp-avatar-fallback{width:24px;height:24px;font-size:12px}
 .rp-opening-name{font-size:13px;font-weight:600}
@@ -165,7 +232,7 @@ body[data-rp-active="1"] .rp-genimg .rp-imggrid{padding:0}
 /* Role-play user bubble replica, matching the native user row metrics
    (column/flex-end, 525px stack cap, 22px-radius bubble, 16px/24px text). */
 .rp-user-row{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-.rp-user-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:0;max-width:min(525px,82%)}
+.rp-user-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:0;max-width:min(calc(var(--dsh-chat-content-width,748px)*.702),82%)}
 .rp-user-bubble{background:var(--dsw-specific-bubble);max-width:100%;color:var(--dsw-alias-label-primary);border-radius:22px;padding:10px 16px;font-size:16px;line-height:24px;overflow-wrap:anywhere}
 .rp-user-row .rp-msg-actions{margin-left:0;margin-right:-6px}
 .rp-user-edit{font-size:16px;line-height:24px;min-height:96px}

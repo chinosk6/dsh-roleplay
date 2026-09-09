@@ -30,10 +30,12 @@ import { injectCss } from './styles.ts'
 import { RoleplayDock } from './dock.tsx'
 import { RoleplaySettingsSection } from './settings-section.tsx'
 import { GenerateImageView, SaveCardView } from './toolviews.tsx'
+import { RoleplayAskQuestionView } from './ask-question.tsx'
 import { RoleplayAssistantActions } from './assistant-actions.tsx'
 import { RoleplayUserNode } from './user-node.tsx'
 import { CardEditor } from './card-editor.tsx'
 import { wireRuntime } from './runtime.ts'
+import { CHAT_NODE_LOCALE } from './compat.ts'
 import { zh, en, LOCALE_NS, setLocale } from './i18n.ts'
 
 export const name = 'roleplay-client'
@@ -73,6 +75,16 @@ export function apply(ctx: ClientContext): void {
     // The host-plane global variant (ordinary sessions) renders identically.
     ctx.slots.register({ name: 'tool.call.toolview', key: 'generate_image_danbooru_rp' }, GenerateImageView as never),
     ctx.slots.register({ name: 'tool.call.toolview', key: 'save_character_card' }, SaveCardView as never),
+    // Keyed shadow of the native question row: renders the options of a
+    // question that never got answered, and DELEGATES every other case (and
+    // every non-role-play session) back to the shipped row.
+    // `locale: 'conversation'` is the seat the SHADOWED native row reads its
+    // own copy through — without it the delegated renderer has no `t` and
+    // throws, which retires this entry and undoes the whole takeover.
+    ctx.slots.register(
+      { name: 'tool.call.toolview', key: 'ask_user_question', priority: -1, locale: 'conversation' },
+      RoleplayAskQuestionView as never,
+    ),
   ])
 
   // Role-play actions in the native assistant action strip (list slot —
@@ -86,11 +98,14 @@ export function apply(ctx: ClientContext): void {
   // Keyed shadow of the `user` chat node. Outside role-play sessions the
   // component looks up and renders the shadowed NATIVE entry verbatim, so
   // this global takeover is visually inert everywhere except role-play.
-  // `locale: 'conversation'` binds the conversation namespace's `t` seat —
-  // the delegated native renderer reads its own copy through it.
+  // The locale option binds the `t` seat the DELEGATED native renderer reads
+  // its own copy through — that namespace moved from `conversation` to `chat`
+  // when dsh split the transcript out (see compat.ts).
   ctx.slots.inject('conversation.chat.node', () =>
     ctx.slots.register(
-      { name: 'conversation.chat.node', key: 'user', priority: -1, locale: 'conversation' },
+      // The cast carries `chat` past the rc.6 namespace union this build
+      // typechecks against; the harness validates the seat at runtime.
+      { name: 'conversation.chat.node', key: 'user', priority: -1, locale: CHAT_NODE_LOCALE as 'conversation' },
       RoleplayUserNode as never,
     ))
 }
