@@ -21,9 +21,11 @@
  * plugin's own i18n layer mirrors the active locale, so every component
  * re-renders with fresh copy when the UI language switches.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { injectCss } from './styles.ts'
@@ -103,9 +105,7 @@ export function apply(ctx: ClientContext): void {
   // when dsh split the transcript out (see compat.ts).
   ctx.slots.inject('conversation.chat.node', () =>
     ctx.slots.register(
-      // The cast carries `chat` past the rc.6 namespace union this build
-      // typechecks against; the harness validates the seat at runtime.
-      { name: 'conversation.chat.node', key: 'user', priority: -1, locale: CHAT_NODE_LOCALE as 'conversation' },
+      { name: 'conversation.chat.node', key: 'user', priority: -1, locale: CHAT_NODE_LOCALE },
       RoleplayUserNode as never,
     ))
 }

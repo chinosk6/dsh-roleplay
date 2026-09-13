@@ -234,6 +234,7 @@ body:not([data-rp-active="1"]) [data-chat-flow-kind="tool-call"][data-turn-proce
 .rp-user-row{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
 .rp-user-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:0;max-width:min(calc(var(--dsh-chat-content-width,748px)*.702),82%)}
 .rp-user-bubble{background:var(--dsw-specific-bubble);max-width:100%;color:var(--dsw-alias-label-primary);border-radius:22px;padding:10px 16px;font-size:16px;line-height:24px;overflow-wrap:anywhere}
+.rp-user-text{white-space:pre-wrap;word-break:break-word}
 .rp-user-row .rp-msg-actions{margin-left:0;margin-right:-6px}
 .rp-user-edit{font-size:16px;line-height:24px;min-height:96px}
 .rp-user-instruction{margin-top:6px;padding-top:6px;border-top:1px dashed var(--dsw-alias-border-l2);font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);white-space:pre-wrap}

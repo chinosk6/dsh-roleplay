@@ -8,7 +8,8 @@ import { mkdir, readdir, readFile, rename, rm, stat, statfs, writeFile } from 'n
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, parse, resolve } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
-import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings'
+import type { SettingsScope } from '@deepseek-ai/dsh-settings'
+import { settingsNs } from './dsh-compat.ts'
 import { defineDomain, domainTable, type Domain } from '@deepseek-ai/dsh-storage-domain'
 import { CharacterCard, GeneratedImage, SessionBinding } from './cards/types.ts'
 import { cardFromInterchange, cardFromPng, cardToInterchange, cardToPng } from './cards/codec.ts'
@@ -61,7 +62,7 @@ export class RoleplayService extends Service {
   constructor(ctx: Context, dataDir: string) {
     super(ctx, 'roleplay')
     this.dataDir = dataDir
-    this.settings = ctx.settings.register(settingsNamespace('roleplay'), RoleplaySettings)
+    this.settings = ctx.settings.register(settingsNs('roleplay'), RoleplaySettings)
     const current = () => this.settings.get()
     this.providers = [
       createNovelAiProvider(() => ({

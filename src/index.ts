@@ -6,7 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { settingsNs } from './dsh-compat.ts'
 import { RoleplayService } from './service.ts'
 import { registerRoutes } from './http.ts'
 import { materializePresets, type PresetLocale } from './presets.ts'
@@ -25,13 +25,13 @@ export const Config: z<Config> = z.object({
 })
 
 /** The locale namespace is owned by the dsh locale plugin; read-only here. */
-const LOCALE_NS = settingsNamespace('locale')
+const LOCALE_NS = settingsNs('locale')
 
 /** The roleplay settings namespace, registered by RoleplayService. */
-const ROLEPLAY_NS = settingsNamespace('roleplay')
+const ROLEPLAY_NS = settingsNs('roleplay')
 
 /** Namespace the preset-picker UIs key their roster-refresh event on. */
-const AGENT_PRESETS_NS = settingsNamespace('agent-presets')
+const AGENT_PRESETS_NS = settingsNs('agent-presets')
 
 /** Resolve the preset display language from the host locale section. */
 function presetLocaleOf(section: unknown): PresetLocale {

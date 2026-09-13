@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { PERSONA_ORDER, PERSONA_SECTION, type AssembleContext } from '@deepseek-ai/dsh-system-prompt'
+import type { AssembleContext } from '@deepseek-ai/dsh-system-prompt'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-tools'
@@ -28,6 +28,7 @@ import {
   selectLore,
   unboundHint,
 } from './prompts.ts'
+import { PERSONA_SECTION_NAME, personaSectionOrder } from './dsh-compat.ts'
 import { resolveUploadedImagePng } from './uploads.ts'
 import { GLOBAL_IMAGE_TOOL_NAME, registerImageTool } from './image-tool.ts'
 import type {} from './service.ts'
@@ -42,6 +43,13 @@ export interface Config {
 export const Config: z<Config> = z.object({
   mode: z.union(['roleplay', 'forge']).default('roleplay'),
 })
+
+/**
+ * JSON as a `{ type: 'json' }` tool output accepts it. Declared here rather
+ * than imported: the harness moved this type between packages (dsh-tools →
+ * dsh-util-values), and a type-only need is not worth that version coupling.
+ */
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
 /** Concatenated text of the last few derived messages, for lore keyword scans. */
 function recentText(agent: Agent | undefined): string {
@@ -133,8 +141,8 @@ export function apply(ctx: Context, config: Config): void {
     ctx.systemPrompt.variable('user_macro', () => '{{user}}')
     ctx.systemPrompt.variable('char_macro', () => '{{char}}')
     ctx.systemPrompt.section({
-      name: PERSONA_SECTION,
-      order: PERSONA_ORDER,
+      name: PERSONA_SECTION_NAME,
+      order: personaSectionOrder(ctx),
       text: () => [forgePersona(), nsfwEnhanceSection()].join('\n\n'),
     })
     ctx.systemPrompt.section({
@@ -156,8 +164,8 @@ export function apply(ctx: Context, config: Config): void {
 
   // ── role-play mode ──
   ctx.systemPrompt.section({
-    name: PERSONA_SECTION,
-    order: PERSONA_ORDER,
+    name: PERSONA_SECTION_NAME,
+    order: personaSectionOrder(ctx),
     text: (context) => {
       const svc = service()
       const settings = svc.settings.get()
@@ -521,7 +529,7 @@ function registerForgeTools(ctx: Context): void {
       const wsPath = agentId ? ctx.roleplay.getBinding(agentId)?.workspacePath : undefined
       const card = ctx.roleplay.getCard(args.card_id, wsPath)
       if (!card) throw new Error(`卡片 ${args.card_id} 不存在`)
-      return card as unknown as import('@deepseek-ai/dsh-tools').JsonValue
+      return card as unknown as JsonValue
     },
   }))
 }

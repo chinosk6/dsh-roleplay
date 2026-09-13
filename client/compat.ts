@@ -47,7 +47,7 @@ export const SPLIT_CHAT_BUILD = hasClientModule('@deepseek-ai/dsh-client-ui-chat
  * to. The user-node shadow delegates to one of them, so it must claim the
  * same seat or the delegated renderer reads copy from the wrong dictionary.
  */
-export const CHAT_NODE_LOCALE = SPLIT_CHAT_BUILD ? 'chat' : 'conversation'
+export const CHAT_NODE_LOCALE: 'chat' | 'conversation' = SPLIT_CHAT_BUILD ? 'chat' : 'conversation'
 
 // ── slot prop shapes ─────────────────────────────────────────────────────────
 

@@ -15,7 +15,6 @@ import {
   IconCopyOutline16,
   IconEditOutline16,
   IconSendOutline16,
-  MessageText,
   Tooltip,
   writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -122,7 +121,13 @@ export function RoleplayUserNode(props: UserNodeProps): ReactNode {
     <div className="rp-user-row" data-time-hover-root>
       <div className="rp-user-stack">
         <div className="rp-user-bubble">
-          <MessageText text={body} />
+          {/* Plain pre-wrap text, the way the native user bubble draws it.
+              Rendered here rather than through the primitives' text component:
+              that export was dropped in dsh 0.1.5, and a primitive that is
+              gone arrives as `undefined`, i.e. a render crash. The
+              .rp-user-text class carries the white-space/word-break its own
+              CSS used to provide. */}
+          <div className="rp-user-text">{body}</div>
           {instruction !== undefined ? (
             <div className="rp-user-instruction">⚙ {instruction}</div>
           ) : null}
