@@ -70,6 +70,9 @@ export interface CharacterCardDetail {
     name: string
     description: string
     personality: string
+    systemPrompt: string
+    postHistoryInstructions: string
+    alternateGreetings: string[]
     scenario: string
     firstMessage: string
     exampleDialogs: string

@@ -11,7 +11,9 @@ import { useT, tf } from './i18n.ts'
 const LORE_POSITIONS = ['system_top', 'before_char', 'after_char', 'user_top', 'assistant_top', 'at_depth'] as const
 
 /** String-typed card fields rendered as text areas. */
-type TextKey = 'name' | 'description' | 'personality' | 'scenario' | 'firstMessage' | 'exampleDialogs' | 'creatorNotes'
+type TextKey =
+  | 'name' | 'description' | 'personality' | 'systemPrompt' | 'postHistoryInstructions'
+  | 'scenario' | 'firstMessage' | 'exampleDialogs' | 'creatorNotes'
 
 function Field({ label, children }: { label: string; children: ReactNode }): ReactNode {
   return (
@@ -178,6 +180,8 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
       {field('scenario', t('rp.editor.scenario'), 3)}
       {field('firstMessage', t('rp.editor.firstMessage'), 6)}
       {field('exampleDialogs', t('rp.editor.exampleDialogs'), 4)}
+      {field('systemPrompt', t('rp.editor.systemPrompt'), 4)}
+      {field('postHistoryInstructions', t('rp.editor.postHistory'), 3)}
       {field('creatorNotes', t('rp.editor.creatorNotes'), 2)}
 
       <h4>{t('rp.editor.book')}</h4>

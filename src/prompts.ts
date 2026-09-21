@@ -23,7 +23,7 @@ export function roleplayRules(userName: string): string {
     '- 最终回复只写正文，不要用「我理解了」「好的」「作为 AI」「以下是」等开场，也不要总结本条规则或告诉用户你正在遵守规则。',
     `- 「${userName}」已明确给出的言行属于剧情事实，必须自然承接；不得为其新增未明确的决定、发言、后续行动或内心想法。`,
     `- 可以描写其他角色的行为、反应、情绪和台词，并让他们根据设定自然推动剧情。需要「${userName}」回答、选择或行动时，停在可供回应的位置。`,
-    '- 正文格式：口头对话使用『』包裹；心理活动使用（）包裹；其余为动作与场景描写。',
+    '- 正文格式：口头对话使用『』包裹；心理活动使用（）包裹；其余为动作与场景描写。这是兜底规则，角色卡自带格式要求时以角色卡为准。',
     '- 回复使用中文，长度与节奏随剧情自然变化。角色卡若提供对话示例，文风以示例和人设为准；开场白只用于衔接剧情，不要整段重复。',
     '- 角色受其设定、性格、认知与所处环境的约束，行为要符合逻辑与关系发展阶段。',
     '- 用户消息末尾若出现「[系统指令: …]」，视为对下一段演出的舞台指示：按指示调整剧情或表现方式，不要在正文中提及该指令本身。',
@@ -192,16 +192,48 @@ export function characterSection(
   if (lore.top.length > 0) parts.push(loreSection(lore.top, card.name, userName))
   if (lore.before.length > 0) parts.push(loreSection(lore.before, card.name, userName))
   const definition: string[] = [`[你扮演的角色]`, `名字：${card.name}`]
-  if (card.personality.trim()) definition.push(`设定：\n${macros(card.personality)}`)
+  // Both fields read as persona: cards written here use `description` as a
+  // short intro ahead of `personality`, interchange cards put the whole persona
+  // in `description` and often leave `personality` empty. One heading, that order.
+  const persona = [card.description, card.personality].filter(text => text.trim()).map(macros)
+  if (persona.length > 0) definition.push(`设定：\n${persona.join('\n\n')}`)
   if (card.scenario.trim()) definition.push(`当前场景：\n${macros(card.scenario)}`)
   if (card.exampleDialogs.trim()) definition.push(`对话示例（仅参考文风，不是既有剧情）：\n${macros(card.exampleDialogs)}`)
   parts.push(definition.join('\n\n'))
+  if (card.systemPrompt.trim()) parts.push(cardRulesSection(card.systemPrompt, card.name, userName))
   if (userPersona.trim()) parts.push(`[用户设定]\n${userName}：${userPersona}`)
   if (lore.after.length > 0) parts.push(loreSection(lore.after, card.name, userName))
   if (card.firstMessage.trim()) {
     parts.push(`[开场白]\n对话由你的这段开场白开始（用户已读过，不要重复它，不要模仿开场白文风，衔接其后的剧情即可）：\n${macros(card.firstMessage)}`)
   }
   return parts.join('\n\n')
+}
+
+/**
+ * The card's own `system_prompt`. The interchange format has it replace the
+ * frontend's system prompt; appending it keeps this mode's standing rules
+ * intact, so it carries its precedence explicitly. Choice mode is carved out:
+ * cards routinely demand a numbered menu in the reply body, which would fight
+ * the ask_user_question path the session setting owns.
+ */
+export function cardRulesSection(systemPrompt: string, charName: string, userName: string): string {
+  return [
+    '[角色卡附加规则]',
+    '以下规则由角色卡自带，与上面的通用规则冲突时以这里为准：',
+    applyMacros(systemPrompt, charName, userName),
+    '例外：下一步行动的呈现方式由本会话的设置决定，角色卡中关于选项、菜单或编号列表的要求不改变它。',
+  ].join('\n')
+}
+
+/**
+ * The card's `post_history_instructions`, rendered as a runtime context so it
+ * lands after the retained history — the position the interchange format
+ * defines for it, and the reason it carries more weight there than the same
+ * text would in the system prompt.
+ */
+export function cardPostHistoryContext(card: CharacterCard, userName: string): string {
+  if (!card.postHistoryInstructions.trim()) return ''
+  return escapeBraces(`[角色卡指示]\n${applyMacros(card.postHistoryInstructions, card.name, userName)}`)
 }
 
 /** Does the user's latest text explicitly ask for a picture? */

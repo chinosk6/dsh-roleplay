@@ -126,10 +126,17 @@ export function cardFromInterchange(raw: unknown): CharacterCard {
     name,
     description: asString(data.description) || asString(data.char_persona),
     personality: asString(data.personality),
+    systemPrompt: asString(data.system_prompt),
+    postHistoryInstructions: asString(data.post_history_instructions),
+    alternateGreetings: Array.isArray(data.alternate_greetings)
+      ? data.alternate_greetings.map(asString).filter(Boolean)
+      : [],
     scenario: asString(data.scenario),
     firstMessage: asString(data.first_mes) || asString(data.first_message) || asString(data.greeting),
     exampleDialogs: asString(data.mes_example) || asString(data.example_dialogs),
     creatorNotes: asString(data.creator_notes) || asString(data.creatorcomment) || asString(data.creator_comment),
+    creator: asString(data.creator),
+    characterVersion: asString(data.character_version),
     tags: Array.isArray(data.tags) ? data.tags.map(asString).filter(Boolean) : [],
     book: normalizeBook(data.character_book ?? root.character_book),
     regexScripts: normalizeRegexScripts(asRecord(data.extensions)?.regex_scripts),
@@ -185,12 +192,12 @@ export function cardToInterchange(card: CharacterCard): Record<string, unknown> 
     first_mes: card.firstMessage,
     mes_example: card.exampleDialogs,
     creator_notes: card.creatorNotes,
-    system_prompt: '',
-    post_history_instructions: '',
-    alternate_greetings: [],
+    system_prompt: card.systemPrompt,
+    post_history_instructions: card.postHistoryInstructions,
+    alternate_greetings: card.alternateGreetings,
     tags: card.tags,
-    creator: '',
-    character_version: '',
+    creator: card.creator,
+    character_version: card.characterVersion,
     extensions: card.regexScripts.length > 0
       ? {
           regex_scripts: card.regexScripts.map(script => ({

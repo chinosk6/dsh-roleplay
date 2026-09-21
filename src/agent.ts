@@ -15,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-tools'
 import {
   applyMacros,
   autoImageSection,
+  cardPostHistoryContext,
   characterSection,
   choiceModeSection,
   detectImageIntent,
@@ -246,6 +247,20 @@ export function apply(ctx: Context, config: Config): void {
     text: (context) => {
       const lore = loreOf(context)
       return lore ? loreContext(lore.groups.assistantTop, lore.card.name, lore.userName, '[对下一条回复的指示]') : ''
+    },
+  })
+  // Last of the contexts: the interchange format puts the card's
+  // post-history instructions after everything else the model reads.
+  ctx.systemPrompt.context({
+    name: 'roleplay:card-post-history',
+    order: 320,
+    text: (context) => {
+      const svc = service()
+      const agent = agentOf(context)
+      const binding = agent ? svc.getBinding(String(agent.id)) : undefined
+      const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
+      if (!card) return ''
+      return cardPostHistoryContext(card, svc.settings.get().userName)
     },
   })
 

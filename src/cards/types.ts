@@ -64,10 +64,24 @@ export type RegexScript = z.infer<typeof RegexScript>
 export const CharacterCard = z.object({
   id: z.string(),
   name: z.string(),
-  /** Short human-facing intro shown on the card; not injected into prompts. */
+  /**
+   * Short intro shown on the card list, and the opening of the injected
+   * persona: interchange cards keep their full persona here and often leave
+   * `personality` empty.
+   */
   description: z.string().default(''),
   /** The full persona definition injected into the system prompt. */
   personality: z.string().default(''),
+  /** Card-carried rules, injected after the persona. The interchange `system_prompt`. */
+  systemPrompt: z.string().default(''),
+  /**
+   * The interchange `post_history_instructions`: injected after the retained
+   * history rather than into the system prompt, which is the position the
+   * format defines for it.
+   */
+  postHistoryInstructions: z.string().default(''),
+  /** Extra openings carried by the card. Stored for round-tripping; not selectable yet. */
+  alternateGreetings: z.array(z.string()).default([]),
   /** Scene / world state at the start of the conversation. */
   scenario: z.string().default(''),
   /** Opening message shown (and prompt-injected) before the first turn. */
@@ -76,6 +90,9 @@ export const CharacterCard = z.object({
   exampleDialogs: z.string().default(''),
   /** Author notes / hashtags; display only. */
   creatorNotes: z.string().default(''),
+  /** Interchange author metadata; display only, kept so exports round-trip. */
+  creator: z.string().default(''),
+  characterVersion: z.string().default(''),
   tags: z.array(z.string()).default([]),
   book: z.array(LoreEntry).default([]),
   /** Card-carried regex scripts (display coloring on the client). */
