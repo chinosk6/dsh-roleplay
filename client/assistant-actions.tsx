@@ -5,7 +5,7 @@
  * Renders nothing outside role-play sessions.
  */
 import { useState, type ReactNode } from 'react'
-import { IconEnhanceOutline16, IconRefreshOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEnhanceOutlineRegular, IconRefreshOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api } from './api.ts'
 import { bumpImageRevs, rewindAndResend, workspaceOfSession } from './runtime.ts'
 import { turnOf, useAgentPreset, useChatFlow, useSessionRunning, type ChatFlow, type SessionSlotProps } from './compat.ts'
@@ -84,7 +84,7 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
               .catch(() => setBusy(false))
           }}
         >
-          {busy === 'reply' ? <span className="rp-imgspin" /> : <IconRefreshOutline16 size={16} />}
+          {busy === 'reply' ? <span className="rp-imgspin" /> : <IconRefreshOutlineRegular size={16} />}
         </button>
       </Tooltip>
       {context.imageIds.length > 0 ? (
@@ -105,7 +105,7 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
                 .finally(() => setBusy(false))
             }}
           >
-            {busy === 'images' ? <span className="rp-imgspin" /> : <IconEnhanceOutline16 size={16} />}
+            {busy === 'images' ? <span className="rp-imgspin" /> : <IconEnhanceOutlineRegular size={16} />}
           </button>
         </Tooltip>
       ) : null}

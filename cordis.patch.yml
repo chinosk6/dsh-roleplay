@@ -1,13 +1,112 @@
 # dsh-roleplay bundle layer: applied over the base/web layers when this
 # package is listed in a profile's `dsh.profile.bundles`.
 #
-# One host row carries both halves: the host plugin (settings, storage, HTTP
-# surface, agent presets) and — through this package's `dsh.client`
+# The host row `roleplay` carries both halves: the host plugin (settings,
+# storage, HTTP surface) and — through this package's `dsh.client`
 # declaration — the browser bundle served at /plugins/dsh-roleplay/client.js.
-# The session-plane plugin (`dsh-roleplay/agent`) is NOT mounted here; the two
-# agent presets this plugin writes to <dshHome>/.agent-presets reference it
-# per session mode.
+# Its live settings are the row's own volatile Config fields; the settings
+# page writes them into the profile patch under this id.
+#
+# The two session modes are `@deepseek-ai/dsh-agent-preset` declarations: the
+# preset registry no longer scans a directory, so presets are ordinary rows.
+# The session-plane plugin (`dsh-roleplay/agent`) is mounted only inside them.
+# Their ids (`roleplay`, `character-forge`) are what sessions record, so they
+# must stay stable for existing sessions to resume.
+#
+# Display text is plain strings (only built-in presets get localized labels),
+# hence the bilingual names.
 
 - insert:
     - id: roleplay
       name: 'dsh-roleplay'
+
+    - id: preset-roleplay
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: roleplay
+        name: 角色扮演 · Role-play
+        description: 与角色卡进行沉浸式角色扮演对话，支持场景插图生成。 / Immersive role-play conversations with character cards, with scene illustration generation.
+        order: 20
+        plugins:
+          # Persona, character context, illustration tool and choice-mode
+          # steering. It also hides the file/web tools below from each agent
+          # until the player grants them in the settings: a preset is a static
+          # declaration, so the toggles cannot add or remove these rows.
+          - id: roleplay-session
+            name: 'dsh-roleplay/agent'
+            config:
+              mode: roleplay
+          # Native question tool: choice mode asks the user to pick the next
+          # action through the built-in ask_user_question card.
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          # File permission (allowFileTools): read/write/edit + glob/grep.
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          # Web permission (allowWebTools). Search only — page fetch stays off
+          # so the tool cannot be steered into exfiltrating local data to
+          # arbitrary URLs.
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: false
+              searchTimeoutMs: 60000
+          # Context compaction moved from the host plane into presets in dsh
+          # 0.2; without it a long story would eventually overflow the context
+          # window. Same group as the shipped standard preset.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+
+    - id: preset-character-forge
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: character-forge
+        name: 角色卡创作 · Character Forge
+        description: 从一句灵感生成完整角色卡：人设、开场白、世界书与头像，可导出 PNG/JSON。 / Turn one line of inspiration into a complete character card, exportable as PNG/JSON.
+        order: 21
+        plugins:
+          # The agent interviews the user, then writes and saves complete
+          # character cards through typed tools.
+          - id: forge-session
+            name: 'dsh-roleplay/agent'
+            config:
+              mode: forge
+          # Native question tool, for clarifying questions with clickable options.
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

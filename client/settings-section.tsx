@@ -1,6 +1,6 @@
 /** The「角色扮演」settings page: user identity, image backend, storage, gallery and card library + sub-pages. */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { IconQuestionOutline14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconQuestionOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, formatBytes, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type NovelAiPoints, type RoleplaySettingsValue, type StoreScope } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
@@ -25,7 +25,7 @@ function RiskToggle({ label, hint, value, onToggle }: { label: string; hint: str
       <span className="rp-risk-label">
         {label}
         <Tooltip label={hint} side="bottom" maxWidth={320}>
-          <span className="rp-risk-help" tabIndex={0}><IconQuestionOutline14 size={14} /></span>
+          <span className="rp-risk-help" tabIndex={0}><IconQuestionOutlineRegular size={14} /></span>
         </Tooltip>
       </span>
       <button

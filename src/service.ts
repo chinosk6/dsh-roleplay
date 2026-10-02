@@ -8,13 +8,11 @@ import { mkdir, readdir, readFile, rename, rm, stat, statfs, writeFile } from 'n
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, parse, resolve } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type { SettingsScope } from '@deepseek-ai/dsh-settings'
-import { settingsNs } from './dsh-compat.ts'
 import { defineDomain, domainTable, type Domain } from '@deepseek-ai/dsh-storage-domain'
 import { CharacterCard, GeneratedImage, SessionBinding } from './cards/types.ts'
 import { cardFromInterchange, cardFromPng, cardToInterchange, cardToPng } from './cards/codec.ts'
 import { encodeSolidPng, isPng } from './cards/png.ts'
-import { RoleplaySettings } from './settings.ts'
+import type { SettingsStore } from './settings.ts'
 import { createNovelAiProvider, fetchNovelAiPoints, type NovelAiPoints } from './imagegen/novelai.ts'
 import { createSdWebUiProvider } from './imagegen/sdwebui.ts'
 import { createUrlTemplateProvider } from './imagegen/urltemplate.ts'
@@ -50,7 +48,7 @@ export interface GeneratedImageRef {
 export type StoreScope = 'global' | 'workspace'
 
 export class RoleplayService extends Service {
-  readonly settings: SettingsScope<RoleplaySettings>
+  readonly settings: SettingsStore
   private domain!: Domain<typeof domainSpec>
   private readonly dataDir: string
   private readonly providers: ImageProvider[]
@@ -59,10 +57,10 @@ export class RoleplayService extends Service {
   /** In-flight/failed background generations; an id absent here with a file on disk is ready. */
   private readonly imageTaskStates = new Map<string, { status: 'pending' | 'failed'; error?: string }>()
 
-  constructor(ctx: Context, dataDir: string) {
+  constructor(ctx: Context, dataDir: string, settings: SettingsStore) {
     super(ctx, 'roleplay')
     this.dataDir = dataDir
-    this.settings = ctx.settings.register(settingsNs('roleplay'), RoleplaySettings)
+    this.settings = settings
     const current = () => this.settings.get()
     this.providers = [
       createNovelAiProvider(() => ({

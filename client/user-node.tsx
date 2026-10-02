@@ -11,10 +11,10 @@
  */
 import { createElement, useState, type ReactNode } from 'react'
 import {
-  IconCloseOutline16,
-  IconCopyOutline16,
-  IconEditOutline16,
-  IconSendOutline16,
+  IconCloseOutlineRegular,
+  IconCopyOutlineRegular,
+  IconEditOutlineRegular,
+  IconSendOutlineRegular,
   Tooltip,
   writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -102,12 +102,12 @@ export function RoleplayUserNode(props: UserNodeProps): ReactNode {
             <span className="rp-note">{t('rp.edit.hint')}</span>
             <Tooltip label={t('rp.edit.send')} side="bottom">
               <button type="button" className="rp-msg-action" disabled={!canEdit || draft.trim() === ''} onClick={confirmEdit}>
-                <IconSendOutline16 size={16} />
+                <IconSendOutlineRegular size={16} />
               </button>
             </Tooltip>
             <Tooltip label={t('rp.edit.cancel')} side="bottom">
               <button type="button" className="rp-msg-action" onClick={() => setEditing(false)}>
-                <IconCloseOutline16 size={16} />
+                <IconCloseOutlineRegular size={16} />
               </button>
             </Tooltip>
           </div>
@@ -144,12 +144,12 @@ export function RoleplayUserNode(props: UserNodeProps): ReactNode {
               setEditing(true)
             }}
           >
-            <IconEditOutline16 size={16} />
+            <IconEditOutlineRegular size={16} />
           </button>
         </Tooltip>
         <Tooltip label={copied ? t('rp.chat.copied') : t('rp.chat.copy')} side="bottom">
           <button type="button" className="rp-msg-action" onClick={copy}>
-            <IconCopyOutline16 size={16} />
+            <IconCopyOutlineRegular size={16} />
           </button>
         </Tooltip>
       </div>

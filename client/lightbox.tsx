@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCloseOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useT } from './i18n.ts'
 
 export function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }): ReactNode {
@@ -34,7 +34,7 @@ export function ImageLightbox({ src, onClose }: { src: string; onClose: () => vo
       <div className="rp-lightbox-mask" aria-hidden="true" onMouseDown={onClose} />
       <img className="rp-lightbox-img" src={src} alt="" />
       <button ref={closeRef} type="button" className="rp-lightbox-close" aria-label={t('rp.image.closePreview')} onClick={onClose}>
-        <IconCloseOutline16 size={16} />
+        <IconCloseOutlineRegular size={16} />
       </button>
     </div>,
     document.body,

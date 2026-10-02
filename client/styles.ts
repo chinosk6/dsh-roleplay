@@ -168,10 +168,14 @@ body[data-rp-active="1"] [data-chat-flow-kind="assistant-step"][data-turn-proces
    dsh folds between an illustration and the answer it belongs to. */
 body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg),
 body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [data-chat-flow-kind],
-body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [hidden] + [data-chat-flow-kind]{--dsh-chat-flow-gap:6px}
+body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [hidden] + [data-chat-flow-kind],
+body[data-rp-active="1"] [data-step-process]:has(.rp-genimg),
+body[data-rp-active="1"] [data-step-process]:has(.rp-genimg) + [data-chat-flow-kind],
+body[data-rp-active="1"] [data-step-process]:has(.rp-genimg) + [hidden] + [data-chat-flow-kind]{--dsh-chat-flow-gap:6px}
 /* Revealed rows get no gap from the column rule at all (see above): restate it. */
 body[data-rp-active="1"] [data-chat-flow-kind="tool-call"][data-turn-process-hidden]:has(.rp-genimg){margin-top:6px}
-body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [data-chat-flow-kind="assistant-step"]{border-radius:16px}
+body[data-rp-active="1"] [data-chat-flow-kind="tool-call"]:has(.rp-genimg) + [data-chat-flow-kind="assistant-step"],
+body[data-rp-active="1"] [data-step-process]:has(.rp-genimg) + [data-chat-flow-kind="assistant-step"]{border-radius:16px}
 body[data-rp-active="1"] .rp-genimg{background:transparent;border:none;border-radius:0;padding:2px 0}
 body[data-rp-active="1"] .rp-genimg-images > .rp-toolcard-title{display:none}
 body[data-rp-active="1"] .rp-genimg .rp-imggrid{padding:0}
@@ -187,6 +191,31 @@ body[data-rp-active="1"] .rp-genimg .rp-imggrid{padding:0}
    against the surrounding bubbles (negative margins above). */
 [data-chat-flow-kind="tool-call"][data-turn-process-hidden]:has(.rp-genimg,.rp-forge-result){content-visibility:visible}
 body:not([data-rp-active="1"]) [data-chat-flow-kind="tool-call"][data-turn-process-hidden]:has(.rp-genimg,.rp-forge-result){margin-top:var(--dsh-chat-flow-gap,16px)}
+
+/* dsh 0.2 nests a step's tool calls one level deeper: the column row is now a
+   step-process GROUP (data-step-process, carrying the turn fold's
+   hidden="until-found") holding a header button (the 已调用工具 toggle) and a
+   BODY (data-step-process-body, the step's own until-found fold) around the
+   tool-call rows. Revealing the row alone, as above, left both ancestors at
+   content-visibility:hidden — the illustration sat two disclosures deep.
+   - turn folded: reveal the group, drop its header (nothing to toggle while
+     the turn itself is collapsed) and restate the column gap the sibling rule
+     skips for [hidden] rows;
+   - step folded (turn folded or not): reveal the body, but keep the step's
+     OTHER tool calls out until the player expands it — expanding removes the
+     body's hidden attribute and every row shows natively again.
+   :has() cannot nest, so "every call in the group is ours" is not expressible;
+   with the turn expanded the native header therefore stays, which also keeps
+   the toggle for any sibling calls. */
+[data-step-process][hidden]:has(.rp-genimg,.rp-forge-result){content-visibility:visible;margin-top:var(--dsh-chat-flow-gap,6px)}
+[data-step-process][hidden]:has(.rp-genimg,.rp-forge-result) > :not([data-step-process-body]){display:none}
+[data-step-process-body][hidden]:has(.rp-genimg,.rp-forge-result){content-visibility:visible}
+[data-step-process-body][hidden] [data-step-process-content] > :not(:has(.rp-genimg,.rp-forge-result)){display:none}
+/* The step body is also a capped scroller (max-height:min(400px,50vh)) meant
+   for long tool output. The forge card editor is a full form and a step's
+   illustrations are the story itself, so neither belongs in a nested scroll
+   box: the body grows to fit them and the conversation scrolls instead. */
+[data-step-process-body]:has(.rp-genimg,.rp-forge-result){max-height:none;overflow-y:visible;scrollbar-gutter:auto}
 
 /* Unanswered-question fallback card (see ask-question.tsx): the options of a
    choice-mode question whose run was interrupted, offered as send buttons. */

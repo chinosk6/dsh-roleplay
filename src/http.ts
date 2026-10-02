@@ -1,7 +1,8 @@
 /**
  * The plugin's own browser-facing HTTP surface under `/x-roleplay`. The
- * shipped settings RPC only exposes a fixed namespace allowlist, so the
- * plugin's client half talks to this instead. Loopback-only, mirroring the
+ * plugin's client half talks to this rather than the harness settings RPC:
+ * that one redacts the API keys the settings page edits, and this surface
+ * also carries cards, images and bindings. Loopback-only, mirroring the
  * posture of the built-in `/api` bridge.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -64,8 +65,7 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
   }
   if (path === '/settings' && method === 'PUT') {
     const patch = JSON.parse((await readBody(req)).toString('utf8')) as object
-    await service.settings.update(patch)
-    sendJson(res, 200, { value: service.settings.get() })
+    sendJson(res, 200, { value: await service.settings.update(patch) })
     return
   }
 

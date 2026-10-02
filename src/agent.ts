@@ -1,8 +1,9 @@
 /**
  * Session-plane plugin, mounted only through the two agent presets this
- * bundle materializes. It contributes the mode persona (shadowing the global
- * deployment persona for its preset's sessions), the per-session character
- * context, and the model-facing tools.
+ * bundle declares (cordis.patch.yml). It contributes the mode persona
+ * (shadowing the global deployment persona for its preset's sessions), the
+ * per-session character context, and the model-facing tools. The file/web
+ * tool grants are enforced from the host plane (src/tool-grants.ts).
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -51,6 +52,20 @@ export const Config: z<Config> = z.object({
  * dsh-util-values), and a type-only need is not worth that version coupling.
  */
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+
+/**
+ * Producer-owned message source for the messages this plugin injects. dsh 0.2
+ * retired the generic `{ kind: 'plugin', plugin }` wrapper (session format v4
+ * refuses it) and lifts old records to `plugin:<name>`; using the same kind
+ * keeps new and migrated messages alike.
+ */
+const ROLEPLAY_SOURCE = 'plugin:dsh-roleplay'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'plugin:dsh-roleplay': { kind: 'plugin:dsh-roleplay' }
+  }
+}
 
 /** Concatenated text of the last few derived messages, for lore keyword scans. */
 function recentText(agent: Agent | undefined): string {
@@ -322,7 +337,7 @@ export function apply(ctx: Context, config: Config): void {
           type: 'text',
           text: '[系统指令: 本轮还没有给出行动选项。现在立即调用 ask_user_question 工具，给出本轮的下一步行动选项；不要重复或续写正文。]',
         }],
-        source: { kind: 'plugin', plugin: 'dsh-roleplay' },
+        source: { kind: ROLEPLAY_SOURCE },
       }))
     } catch (error) {
       ctx.logger.warn('choice-mode steering skipped: %s', error)
@@ -425,6 +440,10 @@ function registerForgeTools(ctx: Context): void {
           name: { type: 'string', required: true },
           avatar_url: { type: 'string' },
           previous_avatar_image_id: { type: 'string' },
+          // Where the card landed, for the client's card view: the store
+          // lookup needs the workspace context (not part of the text the
+          // model reads).
+          workspace_path: { type: 'string' },
         },
       },
       render: (_args, value) => [{
@@ -496,6 +515,7 @@ function registerForgeTools(ctx: Context): void {
         name: card.name,
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
         ...(previousAvatarImageId ? { previous_avatar_image_id: previousAvatarImageId } : {}),
+        ...(scope === 'workspace' && wsPath ? { workspace_path: wsPath } : {}),
       }
     },
   }))

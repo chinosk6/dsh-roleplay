@@ -23,7 +23,7 @@ English | [简体中文](README.md)
 
 # Requirements
 
-- [dsh](https://www.npmjs.com/package/@deepseek-ai/dsh) **0.1.0-rc.6+**
+- [dsh](https://www.npmjs.com/package/@deepseek-ai/dsh) **0.2.0-rc.2+** (on dsh 0.1.x, install `dsh-roleplay@0.5.2`)
 - Node **22.19+**
 - [pnpm](https://pnpm.io/) **9+**
 

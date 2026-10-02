@@ -13,11 +13,11 @@
  * a NAMESPACE import, which binds whatever the module happens to export and
  * degrades to a runtime check instead of a dead plugin.
  *
+ * The settings seam is no longer bridged here: dsh 0.2 replaced the
+ * namespace registry with volatile row Config (src/settings.ts), a model with
+ * no older equivalent, and this plugin now requires 0.2.
+ *
  * What moved (0.1.0-rc.6 → 0.1.5):
- *  - `settingsNamespace()` is gone. `ctx.settings.register()` now takes the
- *    plain namespace string, validated at the type level. The old helper only
- *    checked the same `^[a-z][a-z0-9-]*$` pattern and returned its argument,
- *    so the raw string is the correct value on both versions.
  *  - the single `deployment:persona` slot became a prefix/suffix pair:
  *    `PERSONA_SECTION` → `PERSONA_PREFIX_SECTION`, and the `PERSONA_ORDER`
  *    constant → `ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX')`.
@@ -27,22 +27,8 @@
  *    had no equivalent for, is left alone.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import * as settingsModule from '@deepseek-ai/dsh-settings'
 import * as systemPromptModule from '@deepseek-ai/dsh-system-prompt'
 
-/**
- * The namespace currency. 0.1.5 dropped the `settingsNamespace()` builder but
- * KEPT the branded type: `register()` now takes a plain validated string while
- * the `settings/*` events still carry `SettingsNamespace`. Branding here keeps
- * one helper usable at both kinds of call site.
- */
-type SettingsNamespaceArg = SettingsNamespace
-
-/** Optional members this plugin probes for, absent on one version or another. */
-interface SettingsModuleShape {
-  settingsNamespace?: (value: string) => SettingsNamespaceArg
-}
 interface SystemPromptModuleShape {
   /** 0.1.5+ — the deployment persona's leading slot. */
   PERSONA_PREFIX_SECTION?: string
@@ -52,17 +38,7 @@ interface SystemPromptModuleShape {
   PERSONA_ORDER?: number
 }
 
-const settingsFace = settingsModule as SettingsModuleShape
 const systemPromptFace = systemPromptModule as SystemPromptModuleShape
-
-/**
- * A settings namespace in the form this harness's `register` wants.
- * @param name - lowercase kebab-case namespace, as in plugin short names.
- */
-export function settingsNs(name: string): SettingsNamespaceArg {
-  const brand = settingsFace.settingsNamespace
-  return brand === undefined ? (name as SettingsNamespaceArg) : brand(name)
-}
 
 /**
  * The prompt section a preset persona shadows. Naming the SAME section as the

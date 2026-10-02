@@ -2,11 +2,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { api } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
-import { bumpImageRevs, imageRev, imageUrlWithRev, currentWorkspace, subscribeImageRevs } from './runtime.ts'
+import { bumpImageRevs, imageRev, imageUrlWithRev, currentWorkspace, subscribeImageRevs, subscribeWorkspaces, workspaceOfSession } from './runtime.ts'
 import { ImageLightbox } from './lightbox.tsx'
 import { useT } from './i18n.ts'
 
 interface ToolViewProps {
+  /** Session-scope standard prop: the conversation this call belongs to. */
+  sessionId?: string
   callId: string
   toolName: string
   /** Frozen running call or settled result node (settled forms carry `kind`). */
@@ -241,8 +243,16 @@ function GeneratedImage({ url, id, width, height }: {
  * The forge-mode result card: the freshly generated card rendered as an
  * interactive, editable surface — no separate editor visit needed.
  */
-export function SaveCardView({ block }: ToolViewProps): ReactNode {
+export function SaveCardView({ block, sessionId }: ToolViewProps): ReactNode {
   const t = useT()
+  // The store lookup needs the workspace the card was saved under. Newer
+  // results name it; older ones resolve through the call's own session — not
+  // the shown one, which is a different session whenever this transcript is
+  // not the one on screen. The shown workspace is only a last resort.
+  const sessionWs = useSyncExternalStore(
+    subscribeWorkspaces,
+    () => (sessionId !== undefined ? workspaceOfSession(sessionId)?.path : undefined) ?? currentWorkspace()?.path,
+  )
   if (!isSettled(block)) {
     return (
       <div className="rp-toolcard">
@@ -253,6 +263,7 @@ export function SaveCardView({ block }: ToolViewProps): ReactNode {
   const meta = metaOf(block)
   const cardId = typeof meta?.card_id === 'string' ? meta.card_id : undefined
   const name = typeof meta?.name === 'string' ? meta.name : undefined
+  const ws = typeof meta?.workspace_path === 'string' ? meta.workspace_path : sessionWs
   const isError = (block as { isError?: boolean }).isError === true
   if (isError || !cardId) {
     return (
@@ -269,7 +280,7 @@ export function SaveCardView({ block }: ToolViewProps): ReactNode {
         </span>
         <span className="rp-note">{t('rp.tool.cardHint')}</span>
       </div>
-      <CardEditor cardId={cardId} ws={currentWorkspace()?.path} />
+      <CardEditor cardId={cardId} ws={ws} />
       <span className="rp-note">{t('rp.tool.cardManage')}</span>
     </div>
   )

@@ -13,9 +13,17 @@ interface SessionsFace {
   open?(sessionId: string): void
   /** Older face spelling, kept as a fallback. */
   select?(sessionId: string): void
-  /** Session rows plus the current selection (both dsh generations expose it). */
+  /**
+   * Session rows. Up to 0.1.x the snapshot also named the current selection;
+   * 0.2 moved navigation to the view owners and only exposes, per row, how
+   * many local views retain the session (the conversation pane counts as
+   * `mainView`).
+   */
   list?: {
-    getSnapshot(): { current?: string | undefined }
+    getSnapshot(): {
+      current?: string | undefined
+      byId?: Record<string, { retainedBy?: Readonly<Record<string, number | undefined>> } | undefined>
+    }
     subscribe(fn: () => void): () => void
   }
 }
@@ -75,10 +83,11 @@ export function workspaceOfSession(sessionId: string): WorkspaceInfo | undefined
  * The workspace the user is working in right now — the store target for the
  * settings page, the gallery and the forge card editor.
  *
- * Resolution order: the workspace accounting the CURRENT session (the only
- * answer dsh 0.1.2 still allows — its workspace snapshot dropped the
- * `recentWorkspaceId` projection), then that projection where an older
- * harness still publishes it, and only then the first registered workspace.
+ * Resolution order: the workspace accounting the SHOWN session (see
+ * openSessionId — the only answer dsh 0.1.2+ still allows, its workspace
+ * snapshot dropped the `recentWorkspaceId` projection), then that projection
+ * where an older harness still publishes it, and only then the first
+ * registered workspace.
  * Without the session step, 0.1.2 always fell through to that last resort and
  * every store operation silently targeted the first workspace in the list.
  *
@@ -86,12 +95,28 @@ export function workspaceOfSession(sessionId: string): WorkspaceInfo | undefined
  * (useSyncExternalStore snapshot contract).
  */
 let lastCurrent: WorkspaceInfo | undefined
+
+/**
+ * The session shown in the conversation pane. dsh 0.2 dropped the list's
+ * `current` field; the session the main view retains is the same answer
+ * (the shipped agent-preset seat resolves "the shown session" this way).
+ */
+function openSessionId(): string | undefined {
+  const snapshot = sessionsFace?.list?.getSnapshot()
+  if (!snapshot) return undefined
+  if (snapshot.current !== undefined) return snapshot.current
+  for (const [id, row] of Object.entries(snapshot.byId ?? {})) {
+    if ((row?.retainedBy?.mainView ?? 0) > 0) return id
+  }
+  return undefined
+}
+
 export function currentWorkspace(): WorkspaceInfo | undefined {
   const state = workspacesFace?.list?.getSnapshot()
-  const openSessionId = sessionsFace?.list?.getSnapshot().current
+  const shown = openSessionId()
   const row = state
-    ? ((openSessionId !== undefined
-        ? state.items.find(item => item.sessionIds.includes(openSessionId))
+    ? ((shown !== undefined
+        ? state.items.find(item => item.sessionIds.includes(shown))
         : undefined)
       ?? (state.recentWorkspaceId !== undefined
         ? state.items.find(item => item.workspaceId === state.recentWorkspaceId)
