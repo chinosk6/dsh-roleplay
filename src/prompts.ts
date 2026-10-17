@@ -291,6 +291,7 @@ export function autoImageSection(
   return [
     '插图规则：',
     `- ${push}`,
+    `- 本规则针对整轮回复：本轮 generate_image 调用次数达到 ${count > 1 ? `${count} 次` : '1 次'}后不得再调用；在工具结果之后再次看到本规则不代表新的要求，直接继续写正文。`,
     imageTagGuide(),
   ].join('\n')
 }

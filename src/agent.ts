@@ -67,12 +67,38 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
+type DerivedMessage = { role?: string; content?: unknown; source?: { kind?: string } }
+
+/** A message the human actually typed (not a runtime-context snapshot or plugin steer). */
+function isHumanMessage(message: DerivedMessage | undefined): boolean {
+  return message?.role === 'user' && message.source?.kind === 'user'
+}
+
+/**
+ * Derived messages up to and including the latest human message.
+ *
+ * dsh 0.2 re-assembles the runtime contexts before EVERY step of a turn and
+ * appends a fresh snapshot whenever the rendered text differs. Inputs read
+ * from the in-progress tail (the previous snapshot, tool results, the
+ * assistant's half-written reply) would make the snapshot drift mid-turn and
+ * re-issue per-turn directives — e.g. "本轮必须生图" right after the image was
+ * generated. Cutting at the human message keeps every input stable for the
+ * whole turn.
+ */
+function turnInputMessages(agent: Agent): DerivedMessage[] {
+  const messages = agent.session.deriveMessages() as readonly DerivedMessage[]
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (isHumanMessage(messages[i])) return messages.slice(0, i + 1).filter(m => m.source?.kind !== 'runtime-context')
+  }
+  return messages.filter(m => m.source?.kind !== 'runtime-context')
+}
+
 /** Concatenated text of the last few derived messages, for lore keyword scans. */
 function recentText(agent: Agent | undefined): string {
   if (!agent) return ''
   try {
     const texts: string[] = []
-    for (const message of agent.session.deriveMessages().slice(-6)) {
+    for (const message of turnInputMessages(agent).slice(-6)) {
       const content = (message as { content?: unknown }).content
       if (typeof content === 'string') {
         texts.push(content)
@@ -94,14 +120,18 @@ function agentOf(context: AssembleContext): Agent | undefined {
   return (context as AssembleContext & { agent?: Agent }).agent
 }
 
-/** Text of the latest user-role message, for image-intent detection. */
+/**
+ * Text of the latest human message, for image-intent detection. Skips the
+ * runtime-context snapshots (also user-role): their own "插图规则" wording
+ * would otherwise read as an image request from the second step on.
+ */
 function lastUserText(agent: Agent | undefined): string {
   if (!agent) return ''
   try {
-    const messages = agent.session.deriveMessages()
+    const messages = agent.session.deriveMessages() as readonly DerivedMessage[]
     for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i] as { role?: string; content?: unknown } | undefined
-      if (message?.role !== 'user') continue
+      const message = messages[i]
+      if (!message || !isHumanMessage(message)) continue
       if (typeof message.content === 'string') return message.content
       if (Array.isArray(message.content)) {
         return message.content
