@@ -21,7 +21,7 @@ await build({
   platform: 'node',
   target: 'es2023',
   sourcemap: false,
-  external: ['@deepseek-ai/*', 'zod', 'pngjs', 'jpeg-js', 'node:*'],
+  external: ['@deepseek-ai/*', 'zod', 'pngjs', 'jpeg-js', '@cwasm/webp', 'omggif', 'node:*'],
   logLevel: 'warning',
 })
 

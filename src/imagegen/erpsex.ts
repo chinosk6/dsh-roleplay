@@ -6,9 +6,10 @@
  * Points balance comes from GET /api/me.
  *
  * Model selection rides on the wire field `type`: "nai" (server-side
- * nai-diffusion-4-5-full), "banana", "banana pro", "grok", "wai illustrious".
- * The settings expose a free-form model name; anything nai-* collapses to
- * "nai", everything else is passed through verbatim.
+ * nai-diffusion-4-5-full), "nai v5 full", "nai v5 medium", "banana",
+ * "banana pro", "grok", "wai illustrious". The settings take a model name
+ * (a preset or free text): NovelAI model ids map onto the matching gateway
+ * type, a gateway type passes through as-is, anything else is sent verbatim.
  */
 import type { ImageProvider, ImageRequest } from './types.ts'
 import { normalizeDirectorReference } from './normalize.ts'
@@ -64,10 +65,19 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-/** Collapse the user-facing model name onto the API's `type` value. */
+/** Gateway `type` values, lower-cased (the gateway's own spelling). */
+const ERPSEX_TYPES = ['nai', 'nai v5 full', 'nai v5 medium', 'banana', 'banana pro', 'grok', 'wai illustrious']
+
+/** Map the user-facing model name onto the API's `type` value. */
 export function erpSexTypeOf(model: string): string {
   const trimmed = model.trim()
-  if (trimmed === '' || /^nai([-_.\s]|$)/i.test(trimmed)) return 'nai'
+  const lower = trimmed.toLowerCase().replace(/\s+/g, ' ')
+  if (trimmed === '') return 'nai'
+  // A gateway type typed directly ("nai v5 full") must win over the nai-* rule.
+  if (ERPSEX_TYPES.includes(lower)) return lower
+  if (/^nai-diffusion-5-full-medium$/.test(lower)) return 'nai v5 medium'
+  if (/^nai-diffusion-5(-full)?$/.test(lower)) return 'nai v5 full'
+  if (/^nai([-_.\s]|$)/.test(lower)) return 'nai'
   return trimmed
 }
 
@@ -80,8 +90,8 @@ export function createErpSexProvider(config: () => { apiKey: string; model: stri
       const apiKey = rawKey.trim()
       const type = erpSexTypeOf(model)
       // The gateway takes references as bare base64 PNGs (no data: prefix).
-      // For the nai type, pre-normalizing onto a director canvas is required;
-      // other types take the original image as-is.
+      // For the nai (v4.5) type, pre-normalizing onto a director canvas is
+      // required; other types (v5 included) take the original image as-is.
       let reference: string | undefined
       if (request.reference) {
         try {

@@ -430,7 +430,7 @@ function registerForgeTools(ctx: Context): void {
       creator_notes: { type: 'string', description: 'Hashtag-style notes, e.g. "#奇幻 #校园"' },
       tags: { type: 'array', items: { type: 'string' }, description: 'Topic tags' },
       avatar_image_id: { type: 'string', description: 'Image id from a previous generate_image call to use as the portrait' },
-      avatar_upload_index: { type: 'number', description: '使用用户在本会话上传的第 N 张图片作为头像：按上传顺序 1 为第一张，-1 为最新一张；仅支持 PNG/JPEG。用户上传了图片并要求用作头像时用这个，与 avatar_image_id 二选一（同时给出时以本参数为准）' },
+      avatar_upload_index: { type: 'number', description: '使用用户在本会话上传的第 N 张图片作为头像：按上传顺序 1 为第一张，-1 为最新一张；支持 PNG/JPEG/WebP/GIF。用户上传了图片并要求用作头像时用这个，与 avatar_image_id 二选一（同时给出时以本参数为准）' },
       regex_scripts: {
         type: 'array',
         description: 'Display-coloring regex rules applied to the character\'s replies',

@@ -1,7 +1,7 @@
 /** The「角色扮演」settings page: user identity, image backend, storage, gallery and card library + sub-pages. */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IconQuestionOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api, formatBytes, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type NovelAiPoints, type RoleplaySettingsValue, type StoreScope } from './api.ts'
+import { api, formatBytes, pngBytesOf, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type NovelAiPoints, type RoleplaySettingsValue, type StoreScope } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
 import { currentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
@@ -14,6 +14,78 @@ function Field({ label, children }: { label: string; children: ReactNode }): Rea
     <div className="rp-field">
       <label>{label}</label>
       {children}
+    </div>
+  )
+}
+
+/** A preset model: wire value plus display label. */
+interface ModelPreset { value: string; label: string }
+
+const NOVELAI_MODELS: readonly ModelPreset[] = [
+  { value: 'nai-diffusion-4-5-full', label: 'NAI Diffusion V4.5 Full' },
+  { value: 'nai-diffusion-4-5-curated', label: 'NAI Diffusion V4.5 Curated' },
+  { value: 'nai-diffusion-5-full', label: 'NAI Diffusion V5 Full' },
+  { value: 'nai-diffusion-5-full-medium', label: 'NAI Diffusion V5 Full Medium' },
+]
+
+/** NovelAI ids for the nai family (the host maps them onto gateway types); the rest are gateway types. */
+const ERPSEX_MODELS: readonly ModelPreset[] = [
+  { value: 'nai-diffusion-4-5-full', label: 'NAI V4.5 Full' },
+  { value: 'nai-diffusion-5-full', label: 'NAI V5 Full' },
+  { value: 'nai-diffusion-5-full-medium', label: 'NAI V5 Medium' },
+  { value: 'banana', label: 'Banana' },
+  { value: 'banana pro', label: 'Banana Pro' },
+  { value: 'grok', label: 'Grok' },
+  { value: 'wai illustrious', label: 'WAI Illustrious' },
+]
+
+/** NAI v5 has no director reference; mirrors the host's isNaiV5Model / erpSexTypeOf. */
+function isNaiV5(model: string): boolean {
+  const lower = model.trim().toLowerCase().replace(/\s+/g, ' ')
+  return /^nai-diffusion-5(-|$)/.test(lower) || lower === 'nai v5 full' || lower === 'nai v5 medium'
+}
+
+const CUSTOM_MODEL = '__rp_custom_model__'
+
+/**
+ * Model chooser: a preset dropdown whose last entry, 「自定义…」, reveals a
+ * free-text field. A stored value outside the presets opens in custom mode.
+ */
+function ModelPicker({ presets, value, onChange }: {
+  presets: readonly ModelPreset[]
+  value: string
+  onChange: (value: string) => void
+}): ReactNode {
+  const t = useT()
+  const isPreset = presets.some(preset => preset.value === value)
+  // Sticky once chosen, so typing a preset name in the field does not snap back to the dropdown.
+  const [custom, setCustom] = useState(!isPreset)
+  const showCustom = custom || !isPreset
+  return (
+    <div className="rp-field">
+      <label>{t('rp.image.model')}</label>
+      <select
+        value={showCustom ? CUSTOM_MODEL : value}
+        onChange={event => {
+          if (event.target.value === CUSTOM_MODEL) {
+            setCustom(true)
+          } else {
+            setCustom(false)
+            onChange(event.target.value)
+          }
+        }}
+      >
+        {presets.map(preset => <option key={preset.value} value={preset.value}>{preset.label}</option>)}
+        <option value={CUSTOM_MODEL}>{t('rp.image.model.custom')}</option>
+      </select>
+      {showCustom ? (
+        <input
+          type="text"
+          placeholder={t('rp.image.model.customPlaceholder')}
+          value={value}
+          onChange={event => onChange(event.target.value)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -243,7 +315,23 @@ export function RoleplaySettingsSection(): ReactNode {
             <option value="custom">{t('rp.image.ref.custom')}</option>
           </select>
         </Field>
-        {draft.referenceMode !== 'none' ? (
+        {draft.referenceMode !== 'none' && draft.imageProvider === 'novelai' && isNaiV5(draft.novelaiModel) ? (
+          // Official v5 = img2img: NovelAI's own Strength/Noise knobs replace the reference strength.
+          <div className="rp-inline">
+            <Field label={t('rp.image.img2imgStrength')}>
+              <input
+                type="number" min={0.01} max={0.99} step={0.05} value={draft.img2imgStrength}
+                onChange={event => patch({ img2imgStrength: Math.min(0.99, Math.max(0.01, Number(event.target.value) || 0.01)) })}
+              />
+            </Field>
+            <Field label={t('rp.image.img2imgNoise')}>
+              <input
+                type="number" min={0} max={0.99} step={0.05} value={draft.img2imgNoise}
+                onChange={event => patch({ img2imgNoise: Math.min(0.99, Math.max(0, Number(event.target.value) || 0)) })}
+              />
+            </Field>
+          </div>
+        ) : draft.referenceMode !== 'none' ? (
           <div className="rp-inline">
             <Field label={t('rp.image.referenceStrength')}>
               <input
@@ -253,6 +341,10 @@ export function RoleplaySettingsSection(): ReactNode {
             </Field>
           </div>
         ) : null}
+        {draft.referenceMode !== 'none' && (
+          (draft.imageProvider === 'novelai' && isNaiV5(draft.novelaiModel))
+          || (draft.imageProvider === 'erpsex' && isNaiV5(draft.erpsexModel))
+        ) ? <span className="rp-note">{t('rp.image.ref.v5Hint')}</span> : null}
         {draft.referenceMode === 'custom' ? <ReferenceUploader /> : null}
       </div>
 
@@ -441,15 +533,7 @@ function ErpSexConfig({ apiKey, model, onKeyChange, onModelChange }: {
         </div>
         {pointsError ? <span className="rp-error">{pointsError}</span> : null}
       </div>
-      <div className="rp-field">
-        <label>{t('rp.image.model')}</label>
-        <input
-          type="text"
-          placeholder="nai-diffusion-4-5-full"
-          value={model}
-          onChange={event => onModelChange(event.target.value)}
-        />
-      </div>
+      <ModelPicker presets={ERPSEX_MODELS} value={model} onChange={onModelChange} />
     </div>
   )
 }
@@ -525,14 +609,7 @@ function NovelAiConfig({ apiUrl, apiKey, model, onUrlChange, onKeyChange, onMode
         </div>
         {pointsError ? <span className="rp-error">{pointsError}</span> : null}
       </div>
-      <div className="rp-field">
-        <label>{t('rp.image.model')}</label>
-        <input
-          type="text"
-          value={model}
-          onChange={event => onModelChange(event.target.value)}
-        />
-      </div>
+      <ModelPicker presets={NOVELAI_MODELS} value={model} onChange={onModelChange} />
     </div>
   )
 }
@@ -698,7 +775,7 @@ function ReferenceUploader(): ReactNode {
     setBusy(true)
     setError('')
     try {
-      await api.uploadReference(await file.arrayBuffer())
+      await api.uploadReference(await pngBytesOf(file))
       setStamp(Date.now())
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err))
@@ -710,7 +787,7 @@ function ReferenceUploader(): ReactNode {
   return (
     <div className="rp-actions" style={{ marginTop: 8 }}>
       <button className="rp-btn" disabled={busy} onClick={() => fileRef.current?.click()}>{t('rp.image.ref.upload')}</button>
-      <input ref={fileRef} type="file" accept="image/png" style={{ display: 'none' }} onChange={event => void upload(event.target.files)} />
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => void upload(event.target.files)} />
       <img className="rp-ref-preview" src={`${api.referenceUrl()}?t=${stamp}`} alt="" onError={event => { (event.target as HTMLImageElement).style.display = 'none' }} />
       {error ? <span className="rp-error">{error}</span> : null}
     </div>

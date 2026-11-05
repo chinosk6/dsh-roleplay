@@ -46,7 +46,7 @@ export interface RoleplaySettings {
   urlTemplate: string
   /** Persistent API key (`pst-…`) of the ai.erp.sex gateway. */
   erpsexApiKey: string
-  /** Model name; nai-* collapses to the gateway's `nai` type, others pass through. */
+  /** Model name; NovelAI ids map onto the gateway's nai types (see erpSexTypeOf), others pass through. */
   erpsexModel: string
   /** Style prefix (artist/quality tags) prepended to every prompt. */
   stylePrompt: string
@@ -62,6 +62,10 @@ export interface RoleplaySettings {
   referenceMode: 'none' | 'avatar' | 'custom'
   /** How strongly the reference influences the output (0-1). */
   referenceStrength: number
+  /** NAI v5 img2img strength (how much the source is repainted), as in NovelAI's own UI. */
+  img2imgStrength: number
+  /** NAI v5 img2img noise added to the source before repainting. */
+  img2imgNoise: number
   /** Choice mode: every reply ends with 2-8 clickable options. */
   choiceMode: boolean
   /** How many options the model offers per reply in choice mode. */
@@ -107,6 +111,8 @@ const fields = {
   imageAggressiveness: z.union(['conservative', 'active', 'force']).default('active'),
   referenceMode: z.union(['none', 'avatar', 'custom']).default('none'),
   referenceStrength: z.number().min(0).max(1).default(1),
+  img2imgStrength: z.number().min(0.01).max(0.99).default(0.7),
+  img2imgNoise: z.number().min(0).max(0.99).default(0),
   choiceMode: z.boolean().default(false),
   choiceCount: z.number().min(2).max(8).default(4),
   allowImageToolOutsideRoleplay: z.boolean().default(false),

@@ -12,6 +12,7 @@ import { defineDomain, domainTable, type Domain } from '@deepseek-ai/dsh-storage
 import { CharacterCard, GeneratedImage, SessionBinding } from './cards/types.ts'
 import { cardFromInterchange, cardFromPng, cardToInterchange, cardToPng } from './cards/codec.ts'
 import { encodeSolidPng, isPng } from './cards/png.ts'
+import { toPng } from './imagegen/convert.ts'
 import type { SettingsStore } from './settings.ts'
 import { createNovelAiProvider, fetchNovelAiPoints, type NovelAiPoints } from './imagegen/novelai.ts'
 import { createSdWebUiProvider } from './imagegen/sdwebui.ts'
@@ -76,7 +77,29 @@ export class RoleplayService extends Service {
       })),
       createUrlTemplateProvider(() => current().urlTemplate),
       createErpSexProvider(() => ({ apiKey: current().erpsexApiKey, model: current().erpsexModel })),
-    ]
+    ].map(provider => this.pngOutput(provider))
+  }
+
+  /**
+   * Backends may answer JPEG/WebP/GIF (URL templates, hosted gateways), but
+   * images are stored and served as PNG and later reused as avatars, so the
+   * output is normalized here. An undecodable format is kept as-is (browsers
+   * still display it) rather than failing a generation that succeeded.
+   */
+  private pngOutput(provider: ImageProvider): ImageProvider {
+    return {
+      id: provider.id,
+      available: () => provider.available(),
+      generate: async (request) => {
+        const bytes = await provider.generate(request)
+        try {
+          return toPng(bytes)
+        } catch (error) {
+          this.ctx.logger.warn('image from %s kept unconverted: %s', provider.id, error)
+          return bytes
+        }
+      },
+    }
   }
 
   /** Points balance of the hosted wrapper backend account. */
@@ -324,11 +347,11 @@ export class RoleplayService extends Service {
     return this.domain.table('cards').delete(id)
   }
 
-  /** Attach a portrait (PNG bytes) to a card, stored beside the card itself. */
-  async setAvatar(cardId: string, png: Buffer, wsPath?: string): Promise<CharacterCard> {
+  /** Attach a portrait (any supported image format, stored as PNG) to a card, beside the card itself. */
+  async setAvatar(cardId: string, image: Buffer, wsPath?: string): Promise<CharacterCard> {
     const located = this.locateCard(cardId, wsPath)
     if (!located) throw new Error(`unknown card ${cardId}`)
-    if (!isPng(png)) throw new Error('avatar must be a PNG image')
+    const png = toPng(image)
     const file = `${cardId}.png`
     const next = { ...located.card, avatar: file, updatedAt: Date.now() }
     if (located.scope === 'workspace' && located.root) {
@@ -583,12 +606,11 @@ export class RoleplayService extends Service {
     return join(this.dataDir, 'references', `${sessionId}.png`)
   }
 
-  /** Persist a session's own custom reference image (PNG bytes). */
-  async setSessionReferenceImage(sessionId: string, png: Buffer): Promise<void> {
+  /** Persist a session's own custom reference image (any supported format, stored as PNG). */
+  async setSessionReferenceImage(sessionId: string, image: Buffer): Promise<void> {
     const path = this.sessionReferencePath(sessionId)
     if (!path) throw new Error('invalid session id')
-    if (!isPng(png)) throw new Error('reference image must be a PNG file')
-    await writeFile(path, png)
+    await writeFile(path, toPng(image))
   }
 
   async readSessionReferenceImage(sessionId: string): Promise<Buffer | undefined> {
@@ -611,10 +633,9 @@ export class RoleplayService extends Service {
     return path !== undefined && existsSync(path)
   }
 
-  /** Persist the custom reference image (PNG bytes) used by the 'custom' mode. */
-  async setReferenceImage(png: Buffer): Promise<void> {
-    if (!isPng(png)) throw new Error('reference image must be a PNG file')
-    await writeFile(join(this.dataDir, 'reference.png'), png)
+  /** Persist the custom reference image (any supported format, stored as PNG) used by the 'custom' mode. */
+  async setReferenceImage(image: Buffer): Promise<void> {
+    await writeFile(join(this.dataDir, 'reference.png'), toPng(image))
   }
 
   async readReferenceImage(): Promise<Buffer | undefined> {
@@ -687,6 +708,8 @@ export class RoleplayService extends Service {
           signal: wait ? signal : undefined,
           reference,
           referenceStrength: config.referenceStrength,
+          img2imgStrength: config.img2imgStrength,
+          img2imgNoise: config.img2imgNoise,
         })
         // The chain assignment happens synchronously here, keeping strict
         // FIFO ordering across ids and across concurrent callers.
@@ -977,6 +1000,8 @@ export class RoleplayService extends Service {
         signal,
         reference,
         referenceStrength: config.referenceStrength,
+        img2imgStrength: config.img2imgStrength,
+        img2imgNoise: config.img2imgNoise,
       })
       const bytes = (await (this.generationChain = this.generationChain.then(run, run))) as Buffer
       if (located.scope === 'workspace' && located.root) {

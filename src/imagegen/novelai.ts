@@ -7,7 +7,7 @@
 import { inflateRawSync } from 'node:zlib'
 import { randomBytes, randomInt } from 'node:crypto'
 import type { ImageProvider, ImageRequest } from './types.ts'
-import { normalizeDirectorReference } from './normalize.ts'
+import { coverToCanvas, normalizeDirectorReference } from './normalize.ts'
 
 export interface NovelAiConfig {
   apiUrl: string
@@ -80,93 +80,185 @@ function firstZipEntry(zip: Buffer): Buffer {
   throw new Error('ZIP archive holds no readable entry')
 }
 
+/** NAI v5 family (`nai-diffusion-5-*`): multipart wire format, no director references yet. */
+export function isNaiV5Model(model: string): boolean {
+  return /^nai-diffusion-5(-|$)/i.test(model.trim())
+}
+
+/** Fields shared by the v4/v4.5 and v5 parameter blocks. */
+function captionBlocks(request: ImageRequest) {
+  return {
+    v4_prompt: {
+      caption: { base_caption: request.prompt, char_captions: [] },
+      use_coords: false,
+      use_order: true,
+    },
+    v4_negative_prompt: {
+      caption: { base_caption: request.negativePrompt, char_captions: [] },
+      legacy_uc: false,
+    },
+    negative_prompt: request.negativePrompt,
+  }
+}
+
+/** v4/v4.5 body: JSON, the reference rides as a director (character & style) reference. */
+function v4Body(model: string, request: ImageRequest, seed: number) {
+  // The v4 director-reference path requires the image normalized onto one
+  // of the accepted canvases; a raw image answers 400. A failed
+  // normalization drops the reference rather than failing the generation.
+  let reference: string | undefined
+  if (request.reference) {
+    try {
+      reference = normalizeDirectorReference(request.reference).toString('base64')
+    } catch {
+      reference = undefined
+    }
+  }
+  return {
+    input: request.prompt,
+    model,
+    action: 'generate',
+    use_new_shared_trial: true,
+    parameters: {
+      params_version: 3,
+      width: request.width,
+      height: request.height,
+      scale: 5,
+      sampler: 'k_euler_ancestral',
+      steps: 28,
+      seed,
+      n_samples: 1,
+      ucPreset: 0,
+      qualityToggle: true,
+      autoSmea: false,
+      dynamic_thresholding: false,
+      controlnet_strength: 1,
+      legacy: false,
+      add_original_image: true,
+      cfg_rescale: 0,
+      noise_schedule: 'karras',
+      legacy_v3_extend: false,
+      skip_cfg_above_sigma: null,
+      use_coords: false,
+      legacy_uc: false,
+      normalize_reference_strength_multiple: true,
+      inpaintImg2ImgStrength: 1,
+      characterPrompts: [],
+      deliberate_euler_ancestral_bug: false,
+      prefer_brownian: true,
+      image_format: 'png',
+      ...captionBlocks(request),
+      ...(reference
+        ? {
+            director_reference_descriptions: [{
+              caption: { base_caption: 'character&style', char_captions: [] },
+              legacy_uc: false,
+            }],
+            director_reference_information_extracted: [1],
+            director_reference_strength_values: [1],
+            director_reference_secondary_strength_values: [0],
+            director_reference_images_cached: [{
+              cache_secret_key: randomBytes(32).toString('hex'),
+              data: reference,
+            }],
+          }
+        : {}),
+    },
+  }
+}
+
+/**
+ * v5 body. v5 has no director references yet, so a reference image turns the
+ * call into img2img; the source image itself travels as the separate `image`
+ * form part, not inside this JSON. Strength and noise are NovelAI's own
+ * img2img knobs (its UI defaults: 0.7 / 0).
+ */
+function v5Body(model: string, request: ImageRequest, seed: number, img2img: boolean) {
+  const medium = /-medium$/i.test(model.trim())
+  return {
+    input: request.prompt,
+    model,
+    action: img2img ? 'img2img' : 'generate',
+    use_new_shared_trial: true,
+    parameters: {
+      params_version: 4,
+      width: request.width,
+      height: request.height,
+      scale: 5,
+      sampler: 'k_euler_ancestral',
+      steps: medium ? 14 : 28,
+      seed,
+      n_samples: 1,
+      ucPresetId: 'heavy',
+      qualityPresetId: 'none',
+      autoSmea: false,
+      dynamic_thresholding: false,
+      controlnet_strength: 1,
+      legacy: false,
+      add_original_image: true,
+      ...(medium ? {} : { cfg_rescale: 0 }),
+      legacy_v3_extend: false,
+      use_coords: false,
+      normalize_reference_strength_multiple: true,
+      inpaintImg2ImgStrength: 1,
+      legacy_uc: false,
+      characterPrompts: [],
+      straight_alpha: true,
+      tag_hint_qt: 0,
+      tag_hint_uc_preset: 2,
+      deliberate_euler_ancestral_bug: false,
+      prefer_brownian: true,
+      noise_schedule: 'karras',
+      image_format: 'png',
+      ...captionBlocks(request),
+      ...(img2img
+        ? {
+            strength: Math.min(0.99, Math.max(0.01, request.img2imgStrength ?? 0.7)),
+            noise: Math.min(0.99, Math.max(0, request.img2imgNoise ?? 0)),
+            extra_noise_seed: seed,
+          }
+        : {}),
+    },
+  }
+}
+
 export function createNovelAiProvider(config: () => NovelAiConfig): ImageProvider {
   return {
     id: 'novelai',
     available: () => config().apiKey.trim() !== '',
     async generate(request: ImageRequest): Promise<Buffer> {
-      const { apiUrl, apiKey, model } = config()
-      const seed = randomInt(1, 10_000_000_000)
-      // The v4 director-reference path requires the image normalized onto one
-      // of the accepted canvases; a raw image answers 400. A failed
-      // normalization drops the reference rather than failing the generation.
-      let reference: string | undefined
-      if (request.reference) {
-        try {
-          reference = normalizeDirectorReference(request.reference).toString('base64')
-        } catch {
-          reference = undefined
+      const { apiUrl, apiKey, model: rawModel } = config()
+      const model = rawModel.trim()
+      const seed = randomInt(1, 4_294_967_295)
+      let init: RequestInit
+      if (isNaiV5Model(model)) {
+        // img2img sources must match the output size; a reference that fails
+        // to decode falls back to plain text-to-image.
+        let source: Buffer | undefined
+        if (request.reference) {
+          try {
+            source = coverToCanvas(request.reference, request.width, request.height)
+          } catch {
+            source = undefined
+          }
+        }
+        const form = new FormData()
+        form.append(
+          'request',
+          new Blob([JSON.stringify(v5Body(model, request, seed, source !== undefined))], { type: 'application/json' }),
+          'blob',
+        )
+        if (source) form.append('image', new Blob([new Uint8Array(source)], { type: 'image/png' }), 'image.png')
+        // fetch sets the multipart Content-Type (with boundary) itself.
+        init = { method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: form }
+      } else {
+        init = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify(v4Body(model, request, seed)),
         }
       }
-      const body = {
-        input: request.prompt,
-        model,
-        action: 'generate',
-        use_new_shared_trial: true,
-        parameters: {
-          params_version: 3,
-          width: request.width,
-          height: request.height,
-          scale: 5,
-          sampler: 'k_euler_ancestral',
-          steps: 28,
-          seed,
-          n_samples: 1,
-          ucPreset: 0,
-          qualityToggle: true,
-          autoSmea: false,
-          dynamic_thresholding: false,
-          controlnet_strength: 1,
-          legacy: false,
-          add_original_image: true,
-          cfg_rescale: 0,
-          noise_schedule: 'karras',
-          legacy_v3_extend: false,
-          skip_cfg_above_sigma: null,
-          use_coords: false,
-          legacy_uc: false,
-          normalize_reference_strength_multiple: true,
-          inpaintImg2ImgStrength: 1,
-          characterPrompts: [],
-          deliberate_euler_ancestral_bug: false,
-          prefer_brownian: true,
-          image_format: 'png',
-          v4_prompt: {
-            caption: { base_caption: request.prompt, char_captions: [] },
-            use_coords: false,
-            use_order: true,
-          },
-          v4_negative_prompt: {
-            caption: { base_caption: request.negativePrompt, char_captions: [] },
-            legacy_uc: false,
-          },
-          negative_prompt: request.negativePrompt,
-          ...(reference
-            ? {
-                director_reference_descriptions: [{
-                  caption: { base_caption: 'character&style', char_captions: [] },
-                  legacy_uc: false,
-                }],
-                director_reference_information_extracted: [1],
-                director_reference_strength_values: [1],
-                director_reference_secondary_strength_values: [0],
-                director_reference_images_cached: [{
-                  cache_secret_key: randomBytes(32).toString('hex'),
-                  data: reference,
-                }],
-              }
-            : {}),
-        },
-      }
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: request.signal ?? null,
-      })
+      const response = await fetch(apiUrl, { ...init, signal: request.signal ?? null })
       if (!response.ok) {
         const detail = (await response.text().catch(() => '')).slice(0, 300)
         throw new Error(`image API answered ${response.status}: ${detail}`)

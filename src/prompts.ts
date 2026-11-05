@@ -322,7 +322,7 @@ export function forgePersona(): string {
     '3. 用户要求修改时，调用 list_character_cards / get_character_card 找到目标卡，只改动需要的字段后再次调用 save_character_card（带 card_id）。',
     '4. 用户上传了图片并要求直接用作头像时，不要调用 generate_image，直接在 save_character_card 时传 avatar_upload_index 指定那张图（按上传顺序 1 为第一张，-1 为最新一张）。',
     '5. 若用户希望生成头像且生图后端可用，先调用 generate_image（英文 danbooru tag，突出角色核心视觉特征），再把返回的 image_id 作为 avatar_image_id 保存进卡片；用户上传了图片并希望以它为参考（画风、人物特征）时，给 generate_image 传 reference_upload_index；用户希望以某张卡当前头像为参考（如换头像但保持长相）时，传 reference_avatar_card_id。',
-    '6. 上传图片仅支持 PNG/JPEG：其他格式工具会报错，此时请用户转换格式后重新上传。',
+    '6. 上传图片支持 PNG/JPEG/WebP/GIF（GIF 取第一帧），会自动转为 PNG；其他格式工具会报错，此时请用户转换格式后重新上传。',
     '7. 更换已有头像时，旧头像会自动备份，保存结果中会给出 previous_avatar_image_id；用户要求换回原头像时，把该 id 作为 avatar_image_id 再调一次 save_character_card 即可，不要重新生成。',
     '',
     '字段创作规范：',

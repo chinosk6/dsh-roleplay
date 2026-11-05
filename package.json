@@ -59,7 +59,9 @@
     }
   },
   "dependencies": {
+    "@cwasm/webp": "0.1.5",
     "jpeg-js": "0.4.4",
+    "omggif": "1.0.10",
     "pngjs": "7.0.0",
     "zod": "^4.4.3"
   },

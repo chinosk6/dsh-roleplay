@@ -21,6 +21,10 @@ export interface ImageRequest {
   reference?: Buffer | undefined
   /** How strongly the reference influences the output (0-1). */
   referenceStrength?: number | undefined
+  /** img2img strength for backends with a native img2img knob (NAI v5). */
+  img2imgStrength?: number | undefined
+  /** img2img noise for backends with a native img2img knob (NAI v5). */
+  img2imgNoise?: number | undefined
 }
 
 export interface ImageProvider {

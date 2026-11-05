@@ -35,7 +35,7 @@ export interface ImageToolOptions {
   /** Expose the `reference_avatar_card_id` parameter (forge mode only). */
   avatarReference?: boolean
   /**
-   * Expose the `reference_image_path` parameter (local PNG/JPEG file as the
+   * Expose the `reference_image_path` parameter (local PNG/JPEG/WebP/GIF file as the
    * generation reference). Global variant only: it lets sessions whose model
    * cannot take image input still reference a picture by naming its path.
    */
@@ -83,7 +83,7 @@ export function registerImageTool(ctx: Context, options: ImageToolOptions): () =
         ? {
             reference_upload_index: {
               type: 'number' as const,
-              description: '以用户在本会话上传的第 N 张图片为生成参考图：按上传顺序 1 为第一张，-1 为最新一张。仅支持 PNG/JPEG 上传图',
+              description: '以用户在本会话上传的第 N 张图片为生成参考图：按上传顺序 1 为第一张，-1 为最新一张。支持 PNG/JPEG/WebP/GIF 上传图',
             },
           }
         : {}),
@@ -99,7 +99,7 @@ export function registerImageTool(ctx: Context, options: ImageToolOptions): () =
         ? {
             reference_image_path: {
               type: 'string' as const,
-              description: '以本机图片文件为生成参考图：传该文件的绝对路径，仅支持 PNG/JPEG。与 reference_upload_index 同时传时以上传图为准',
+              description: '以本机图片文件为生成参考图：传该文件的绝对路径，支持 PNG/JPEG/WebP/GIF。与 reference_upload_index 同时传时以上传图为准',
             },
           }
         : {}),

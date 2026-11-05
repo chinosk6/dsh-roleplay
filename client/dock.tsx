@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { api, stampedUrl, type CardSummary, type ReferenceMode, type RegexScriptValue, type SessionState } from './api.ts'
+import { api, pngBytesOf, stampedUrl, type CardSummary, type ReferenceMode, type RegexScriptValue, type SessionState } from './api.ts'
 import { subscribeWorkspaces, takeResend, workspaceOfSession } from './runtime.ts'
 import { useAgentPreset, useComposerTakenOver, useSessionBlank, useSessionRunning, type SessionSlotProps } from './compat.ts'
 import { colorizeProse, compileCardRules, replaceMacros, startProseHighlighter, type CardColorRule } from './colorize.tsx'
@@ -437,7 +437,7 @@ function ReferencePopover({ sessionId, state, reload, avatarUrl }: {
     setBusy(true)
     setError('')
     try {
-      await api.uploadSessionReference(sessionId, await file.arrayBuffer())
+      await api.uploadSessionReference(sessionId, await pngBytesOf(file))
       setStamp(Date.now())
       reload()
     } catch (err) {
@@ -487,7 +487,7 @@ function ReferencePopover({ sessionId, state, reload, avatarUrl }: {
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/png"
+                accept="image/*"
                 style={{ display: 'none' }}
                 onChange={event => void upload(event.target.files)}
               />

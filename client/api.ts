@@ -118,6 +118,8 @@ export interface RoleplaySettingsValue {
   imageAggressiveness: 'conservative' | 'active' | 'force'
   referenceMode: 'none' | 'avatar' | 'custom'
   referenceStrength: number
+  img2imgStrength: number
+  img2imgNoise: number
   choiceMode: boolean
   choiceCount: number
   allowImageToolOutsideRoleplay: boolean
@@ -313,4 +315,32 @@ export function formatBytes(bytes: number): string {
   const exponent = Math.min(units.length - 1, Math.floor(Math.log2(bytes) / 10))
   const value = bytes / 2 ** (10 * exponent)
   return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[exponent]}`
+}
+
+/**
+ * An image file's bytes as PNG, for the avatar/reference uploads. The browser
+ * decodes whatever it can display (JPEG, WebP, GIF first frame, AVIF, BMP…)
+ * and re-encodes it as PNG. A file the browser cannot decode goes up as-is:
+ * the host converts PNG/JPEG/WebP/GIF itself and answers a clear error otherwise.
+ */
+export async function pngBytesOf(file: File): Promise<ArrayBuffer> {
+  if (file.type === 'image/png') return file.arrayBuffer()
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width
+      canvas.height = bitmap.height
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('2d canvas unavailable')
+      context.drawImage(bitmap, 0, 0)
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+      if (!blob) throw new Error('PNG encoding failed')
+      return await blob.arrayBuffer()
+    } finally {
+      bitmap.close()
+    }
+  } catch {
+    return file.arrayBuffer()
+  }
 }

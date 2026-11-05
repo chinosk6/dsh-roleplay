@@ -7,8 +7,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
-import { PNG } from 'pngjs'
-import { decode as decodeJpeg } from 'jpeg-js'
+import { SUPPORTED_IMAGE_FORMATS, toPng } from './imagegen/convert.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -32,23 +31,20 @@ export function listUploadedImages(agent: Agent): ImageAttachmentRef[] {
   return refs
 }
 
-/** Convert one accepted upload to PNG bytes; PNG passes through, JPEG is re-encoded. */
+/** Convert one upload to PNG bytes (format detected from content); PNG passes through. */
 function toPngBytes(data: Uint8Array, mediaType: string): Buffer {
-  if (mediaType === 'image/png') return Buffer.from(data)
-  if (mediaType === 'image/jpeg') {
-    const decoded = decodeJpeg(data, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 512 })
-    const png = new PNG({ width: decoded.width, height: decoded.height })
-    Buffer.from(decoded.data.buffer, decoded.data.byteOffset, decoded.data.byteLength).copy(png.data)
-    return PNG.sync.write(png)
+  try {
+    return toPng(data)
+  } catch (error) {
+    throw new Error(`上传图片（${mediaType}）无法转换：${error instanceof Error ? error.message : String(error)}。请告知用户换成 ${SUPPORTED_IMAGE_FORMATS} 图片后重新上传`)
   }
-  throw new Error(`暂不支持 ${mediaType} 格式的上传图片，请告知用户转成 PNG 或 JPEG 后重新上传`)
 }
 
 /** Reference files larger than this are refused before decoding. */
 const MAX_LOCAL_IMAGE_BYTES = 32 * 1024 * 1024
 
 /**
- * Resolve a local image file (PNG/JPEG, detected by magic bytes) to PNG bytes
+ * Resolve a local image file (PNG/JPEG/WebP/GIF, detected by content) to PNG bytes
  * for the generation-reference path of the global image tool. Requires an
  * absolute path: the host process cwd is unrelated to the conversation, so a
  * relative path would resolve somewhere the user never meant.
@@ -66,14 +62,12 @@ export async function resolveLocalImagePng(path: string): Promise<Buffer> {
   if (data.byteLength > MAX_LOCAL_IMAGE_BYTES) {
     throw new Error(`参考图文件过大（${Math.round(data.byteLength / 1024 / 1024)}MB，上限 32MB）`)
   }
-  // Detect by content, not extension: PNG \x89PNG…, JPEG \xFF\xD8\xFF.
-  if (data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) {
-    return toPngBytes(data, 'image/png')
+  // Detected by content, not extension.
+  try {
+    return toPng(data)
+  } catch (error) {
+    throw new Error(`参考图文件无法转换：${error instanceof Error ? error.message : String(error)}。请告知用户换成 ${SUPPORTED_IMAGE_FORMATS} 图片后重试`)
   }
-  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
-    return toPngBytes(data, 'image/jpeg')
-  }
-  throw new Error('参考图文件不是 PNG 或 JPEG 图片（按文件内容判断）。请告知用户转成 PNG/JPEG 后重试')
 }
 
 /**

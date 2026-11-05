@@ -69,3 +69,33 @@ export function normalizeDirectorReference(png: Buffer): Buffer {
   }
   return PNG.sync.write(out)
 }
+
+/**
+ * Cover-fit a PNG onto an exact `width`x`height` canvas (scale to fill,
+ * center-crop the overflow); returns PNG bytes. img2img sources must match
+ * the requested output size.
+ */
+export function coverToCanvas(png: Buffer, width: number, height: number): Buffer {
+  const src = PNG.sync.read(png)
+  if (src.width <= 0 || src.height <= 0) throw new Error('reference image has no pixels')
+  if (src.width === width && src.height === height) return png
+  const scale = Math.max(width / src.width, height / src.height)
+  const offsetX = (src.width * scale - width) / 2
+  const offsetY = (src.height * scale - height) / 2
+  const out = new PNG({ width, height })
+  const pixel: [number, number, number, number] = [0, 0, 0, 0]
+  for (let y = 0; y < height; y++) {
+    const sy = (y + offsetY + 0.5) / scale - 0.5
+    for (let x = 0; x < width; x++) {
+      const sx = (x + offsetX + 0.5) / scale - 0.5
+      sample(src, sx, sy, pixel)
+      const alpha = pixel[3] / 255
+      const offset = (y * width + x) * 4
+      out.data[offset] = Math.round(pixel[0] * alpha)
+      out.data[offset + 1] = Math.round(pixel[1] * alpha)
+      out.data[offset + 2] = Math.round(pixel[2] * alpha)
+      out.data[offset + 3] = 255
+    }
+  }
+  return PNG.sync.write(out)
+}

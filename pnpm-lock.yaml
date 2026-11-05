@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@cwasm/webp':
+        specifier: 0.1.5
+        version: 0.1.5
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4
+      omggif:
+        specifier: 1.0.10
+        version: 1.0.10
       pngjs:
         specifier: 7.0.0
         version: 7.0.0
@@ -119,6 +125,12 @@ importers:
         version: 5.9.3
 
 packages:
+
+  '@canvas/image-data@1.1.0':
+    resolution: {integrity: sha512-QdObRRjRbcXGmM1tmJ+MrHcaz1MftF2+W7YI+MsphnsCrmtyfS0d5qJbk0MeSbUeyM/jCb0hmnkXPsy026L7dA==}
+
+  '@cwasm/webp@0.1.5':
+    resolution: {integrity: sha512-ceIZQkyxK+s7mmItNcWqqHdOBiJAxYxTnrnPNgUNjldB1M9j+Bp/3eVIVwC8rUFyN/zoFwuT0331pyY3ackaNA==}
 
   '@deepseek-ai/cordis-plugin-group@1.0.4':
     resolution: {integrity: sha512-/7tuY5pMQetHava4v6QUeOa4CwZA+mleNvbIoj+iqEmzkYUtlXbLqhzJIcbnDa/Hxgr1jaCwROrI77nuLyeCFg==}
@@ -1043,6 +1055,9 @@ packages:
     resolution: {integrity: sha512-2/yiwaMEpIJdrsjwY/09IoLMLKJtyJGlPhtJd80a+B4x0+SYsnAorg5GlDyJHfTb/UgiIYzbNOgL3HHrigFaAQ==}
     engines: {node: '>=20'}
 
+  omggif@1.0.10:
+    resolution: {integrity: sha512-LMJTtvgc/nugXj0Vcrrs68Mn2D1r0zf630VNtqtpI1FEO7e+O9FP4gqs9AcnBaSEeoHIPm28u6qgPR0oyEpGSw==}
+
   on-headers@1.1.0:
     resolution: {integrity: sha512-737ZY3yNnXy37FHkQxPzt4UZ2UWPWiCZWLvFZ4fu5cueciegX0zGPnrlY6bwRg4FdQOe9YU8MkmJwGhoMybl8A==}
     engines: {node: '>= 0.8'}
@@ -1112,6 +1127,12 @@ packages:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
+
+  '@canvas/image-data@1.1.0': {}
+
+  '@cwasm/webp@0.1.5':
+    dependencies:
+      '@canvas/image-data': 1.1.0
 
   '@deepseek-ai/cordis-plugin-group@1.0.4(@deepseek-ai/cordis-plugin-loader@1.0.5(@deepseek-ai/cordis@4.0.4)(node-addon-require-builtin@0.1.7))(@deepseek-ai/cordis@4.0.4(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.5))':
     dependencies:
@@ -1971,6 +1992,8 @@ snapshots:
       node-addon-require-builtin-win32-arm64-msvc: 0.1.7
       node-addon-require-builtin-win32-ia32-msvc: 0.1.7
       node-addon-require-builtin-win32-x64-msvc: 0.1.7
+
+  omggif@1.0.10: {}
 
   on-headers@1.1.0: {}
 

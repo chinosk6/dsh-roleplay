@@ -4,7 +4,7 @@
  *  - the save_character_card tool view (interactive result card in forge chats)
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, stampedUrl, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue } from './api.ts'
+import { api, pngBytesOf, stampedUrl, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue } from './api.ts'
 import { compileCardRules, toHexColor, withColorValue } from './colorize.tsx'
 import { useT, tf } from './i18n.ts'
 
@@ -84,7 +84,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
     setBusy(true)
     setError('')
     try {
-      const result = await api.updateCardAvatar(cardId, await file.arrayBuffer(), ws)
+      const result = await api.updateCardAvatar(cardId, await pngBytesOf(file), ws)
       setAvatarUrl(result.avatarUrl)
       setAvatarStamp(Date.now())
     } catch (err) {
@@ -162,7 +162,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
         <div className="rp-actions">
           <button className="rp-btn" disabled={busy} onClick={() => fileRef.current?.click()}>{t('rp.editor.avatar.upload')}</button>
           {avatarUrl ? <button className="rp-btn" disabled={busy} onClick={() => void removeAvatar()}>{t('rp.editor.avatar.remove')}</button> : null}
-          <input ref={fileRef} type="file" accept="image/png" style={{ display: 'none' }} onChange={event => void uploadAvatar(event.target.files)} />
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => void uploadAvatar(event.target.files)} />
         </div>
       </div>
 
