@@ -16,6 +16,7 @@ import { subscribeWorkspaces, takeResend, workspaceOfSession } from './runtime.t
 import { useAgentPreset, useComposerTakenOver, useSessionBlank, useSessionRunning, type SessionSlotProps } from './compat.ts'
 import { colorizeProse, compileCardRules, replaceMacros, startProseHighlighter, type CardColorRule } from './colorize.tsx'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { CARD_SEARCH_MIN, CardSearch, filterCards } from './card-search.tsx'
 import { useT, tf } from './i18n.ts'
 
 interface DockProps extends SessionSlotProps {
@@ -173,6 +174,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const t = useT()
   const [state, setState] = useState<SessionState | null>(null)
   const [cards, setCards] = useState<CardSummary[] | null>(null)
+  const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   /** This session's workspace path — recorded on the binding for host-side stores.
@@ -252,20 +254,29 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   if (!state) return null
 
   if (!bound) {
+    const shown = cards ? filterCards(cards, query) : []
     return (
       <div className="rp-dock">
         <div className="rp-dock-row">
           <span className="rp-name">{mode === 'forge' ? t('rp.dock.forge.title') : t('rp.dock.rp.title')}</span>
           <span className="rp-muted">{mode === 'forge' ? t('rp.dock.forge.pick') : t('rp.dock.pick')}</span>
           {error ? <span className="rp-error">{error}</span> : null}
+          {cards && cards.length >= CARD_SEARCH_MIN ? (
+            <>
+              <span className="rp-spacer" />
+              <CardSearch value={query} onChange={setQuery} />
+            </>
+          ) : null}
         </div>
         {cards === null ? (
           <span className="rp-muted">{t('rp.dock.loading')}</span>
         ) : cards.length === 0 ? (
           <span className="rp-muted">{t('rp.dock.noCards')}</span>
+        ) : shown.length === 0 ? (
+          <span className="rp-muted">{t('rp.cards.noMatch')}</span>
         ) : (
           <div className="rp-cardgrid">
-            {cards.map(card => (
+            {shown.map(card => (
               <button key={`${card.scope}-${card.id}`} className="rp-cardcell" disabled={busy} onClick={() => void pick(card.id)}>
                 <Avatar url={card.avatarUrl ? stampedUrl(card.avatarUrl, card.updatedAt) : null} name={card.name} />
                 <span className="rp-cardcell-text">

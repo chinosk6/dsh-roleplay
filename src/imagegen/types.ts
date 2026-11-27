@@ -19,7 +19,7 @@ export interface ImageRequest {
   signal?: AbortSignal | undefined
   /** Optional reference image (PNG bytes) for img2img / vibe transfer. */
   reference?: Buffer | undefined
-  /** How strongly the reference influences the output (0-1). */
+  /** How strongly the reference influences the output (0-1); SD WebUI img2img and NAI v5 Precise Reference honor it. */
   referenceStrength?: number | undefined
   /** img2img strength for backends with a native img2img knob (NAI v5). */
   img2imgStrength?: number | undefined

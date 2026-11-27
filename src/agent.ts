@@ -31,6 +31,7 @@ import {
   unboundHint,
 } from './prompts.ts'
 import { PERSONA_SECTION_NAME, personaSectionOrder } from './dsh-compat.ts'
+import { editBook, replaceBook } from './cards/book-edit.ts'
 import { resolveUploadedImagePng } from './uploads.ts'
 import { GLOBAL_IMAGE_TOOL_NAME, registerImageTool } from './image-tool.ts'
 import type {} from './service.ts'
@@ -65,6 +66,24 @@ declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'plugin:dsh-roleplay': { kind: 'plugin:dsh-roleplay' }
   }
+}
+
+/**
+ * The part of the harness approval service (`approval`) the delete tool uses.
+ * Declared here rather than imported, like the registries in tool-grants.ts:
+ * the service is optional in a composition and only this one call is needed.
+ */
+interface ApprovalLike {
+  /** Put one decision to the user; only `'allowed-once'` is a grant. */
+  request(req: {
+    agent: Agent
+    toolName: string
+    callId?: string
+    /** Audited reason, also the prompt text when no localized one is given. */
+    reason?: string
+    displayReason?: { readonly en: string; readonly [locale: string]: string }
+    signal?: AbortSignal
+  }): Promise<string>
 }
 
 type DerivedMessage = { role?: string; content?: unknown; source?: { kind?: string } }
@@ -418,7 +437,7 @@ function registerForgeTools(ctx: Context): void {
   ctx.tools.register(defineTool({
     name: 'save_character_card',
     description:
-      '创建或更新一张角色卡。传 card_id 表示更新已有卡片（未传的字段保持原值）；不传则新建。文本字段中指代用户写 {{user}}，指代角色写 {{char}}。',
+      '创建或更新一张角色卡。传 card_id 表示更新已有卡片（未传的字段保持原值）；不传则新建。文本字段中指代用户写 {{user}}，指代角色写 {{char}}。只改世界书的个别条目时用 book_upsert / book_remove，不要用 book 重发整本。',
     parameters: {
       card_id: { type: 'string', description: 'Existing card id when updating' },
       name: { type: 'string', description: 'Character display name (required when creating)' },
@@ -446,11 +465,12 @@ function registerForgeTools(ctx: Context): void {
       },
       book: {
         type: 'array',
-        description: 'Lorebook entries',
+        description: '整本世界书：传入即替换全部条目，没列出的条目会被删除。只改个别条目时改用 book_upsert / book_remove。',
         items: {
           type: 'object',
           additionalProperties: false,
           properties: {
+            id: { type: 'string', description: 'Id of the existing entry this continues (from get_character_card); its unlisted settings are kept' },
             title: { type: 'string', required: true },
             content: { type: 'string', required: true },
             keys: { type: 'array', items: { type: 'string' }, description: 'Trigger keywords; omit for constant entries' },
@@ -460,6 +480,28 @@ function registerForgeTools(ctx: Context): void {
           },
         },
       },
+      book_upsert: {
+        type: 'array',
+        description: '世界书增量修改：只传要改或要加的条目，其余条目原样保留。用 id（或没有重名的 title）定位已有条目，只覆盖给出的字段；定位不到则作为新条目追加。不能与 book 同时使用。',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id: { type: 'string', description: 'Id of the entry to change; omit for a new entry' },
+            title: { type: 'string', description: 'Locates the entry when no id is given; with an id, renames it. Required for a new entry' },
+            content: { type: 'string' },
+            keys: { type: 'array', items: { type: 'string' }, description: 'Trigger keywords' },
+            constant: { type: 'boolean', description: 'Always inject, regardless of keywords' },
+            position: { type: 'string', enum: [...positions], description: 'Injection position' },
+            order: { type: 'number', description: 'Sort order within one position' },
+          },
+        },
+      },
+      book_remove: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '世界书增量删除：要删除条目的 id 或标题（标题有重名时必须用 id）。不能与 book 同时使用。',
+      },
     },
     output: {
       schema: {
@@ -468,6 +510,8 @@ function registerForgeTools(ctx: Context): void {
         properties: {
           card_id: { type: 'string', required: true },
           name: { type: 'string', required: true },
+          /** Entry count after a call that changed the lorebook. */
+          book_entries: { type: 'number' },
           avatar_url: { type: 'string' },
           previous_avatar_image_id: { type: 'string' },
           // Where the card landed, for the client's card view: the store
@@ -479,6 +523,7 @@ function registerForgeTools(ctx: Context): void {
       render: (_args, value) => [{
         type: 'text',
         text: `角色卡「${value.name}」已保存（id: ${value.card_id}）。`
+          + (value.book_entries !== undefined ? `世界书现有 ${value.book_entries} 条。` : '')
           + (value.previous_avatar_image_id
             ? `原头像已自动备份（image_id: ${value.previous_avatar_image_id}）；用户想换回原头像时，把它作为 avatar_image_id 再保存一次即可。`
             : '')
@@ -505,15 +550,14 @@ function registerForgeTools(ctx: Context): void {
         promptOnly: false,
         placement: [2],
       }))
-      const book = args.book?.map((entry, index) => ({
-        id: `lore-${index}`,
-        title: entry.title,
-        content: entry.content,
-        keys: entry.keys ?? [],
-        constant: entry.constant ?? (entry.keys === undefined || entry.keys.length === 0),
-        position: (positions as readonly string[]).includes(entry.position ?? '') ? entry.position : 'after_char',
-        order: entry.order ?? 100,
-      }))
+      const incremental = (args.book_upsert?.length ?? 0) > 0 || (args.book_remove?.length ?? 0) > 0
+      if (args.book !== undefined && incremental) {
+        throw new Error('book 与 book_upsert / book_remove 不能同时使用：整本替换用 book，改个别条目用后两者')
+      }
+      const storedBook = existing?.book ?? []
+      const book = args.book !== undefined
+        ? replaceBook(storedBook, args.book)
+        : incremental ? editBook(storedBook, args.book_upsert ?? [], args.book_remove ?? []) : undefined
       let card = await svc.saveCard({
         ...existing,
         ...(args.card_id ? { id: args.card_id } : {}),
@@ -543,10 +587,65 @@ function registerForgeTools(ctx: Context): void {
       return {
         card_id: card.id,
         name: card.name,
+        ...(book !== undefined ? { book_entries: card.book.length } : {}),
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
         ...(previousAvatarImageId ? { previous_avatar_image_id: previousAvatarImageId } : {}),
         ...(scope === 'workspace' && wsPath ? { workspace_path: wsPath } : {}),
       }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'delete_character_card',
+    description: '永久删除一张角色卡及其头像，不可恢复。仅在用户明确要求删除这张卡时调用；调用后由用户在界面上确认，未获确认不会删除。',
+    parameters: {
+      card_id: { type: 'string', required: true, description: 'Id of the card to delete' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          card_id: { type: 'string', required: true },
+          name: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: `角色卡「${value.name}」已删除（id: ${value.card_id}）。` }],
+    },
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      const svc = ctx.roleplay
+      const agentId = exec.agent ? String(exec.agent.id) : undefined
+      const wsPath = agentId ? svc.getBinding(agentId)?.workspacePath : undefined
+      const card = svc.getCard(args.card_id, wsPath)
+      if (!card) throw new Error(`卡片 ${args.card_id} 不存在`)
+      // Card text is third-party content the model reads in this very mode, so
+      // a deletion is never the model's call alone: each one goes through the
+      // harness approval prompt. Every path that cannot put the question to
+      // the user — no approval service, no agent to route it through, prompts
+      // disabled for the session — ends in a refusal, not in a deletion.
+      const approval = ctx.get('approval') as ApprovalLike | undefined
+      if (!approval || !exec.agent) {
+        throw new Error('当前环境无法向用户确认删除，未删除。请用户在「设置 → 角色扮演」中手动删除该卡。')
+      }
+      const outcome = await approval.request({
+        agent: exec.agent,
+        toolName: 'delete_character_card',
+        callId: exec.callId,
+        reason: `permanently delete the character card "${card.name}" (${card.id})`,
+        displayReason: {
+          en: `Permanently delete the character card “${card.name}”? This cannot be undone.`,
+          zh: `永久删除角色卡「${card.name}」？该操作不可撤销。`,
+        },
+        signal: exec.signal,
+      })
+      if (outcome !== 'allowed-once') {
+        throw new Error(outcome === 'rejected'
+          ? `用户没有批准删除角色卡「${card.name}」，未删除。不要重试；如仍需删除，请用户在「设置 → 角色扮演」中操作。`
+          : `删除角色卡「${card.name}」的确认未完成（${outcome}），未删除。`)
+      }
+      if (!await svc.deleteCard(card.id, wsPath)) throw new Error(`卡片 ${card.id} 不存在`)
+      return { card_id: card.id, name: card.name }
     },
   }))
 

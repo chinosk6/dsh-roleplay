@@ -118,6 +118,7 @@ export interface RoleplaySettingsValue {
   imageAggressiveness: 'conservative' | 'active' | 'force'
   referenceMode: 'none' | 'avatar' | 'custom'
   referenceStrength: number
+  novelaiV5Reference: 'director' | 'img2img'
   img2imgStrength: number
   img2imgNoise: number
   choiceMode: boolean

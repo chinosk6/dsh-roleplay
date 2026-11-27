@@ -7,12 +7,18 @@
 import { inflateRawSync } from 'node:zlib'
 import { randomBytes, randomInt } from 'node:crypto'
 import type { ImageProvider, ImageRequest } from './types.ts'
-import { coverToCanvas, normalizeDirectorReference } from './normalize.ts'
+import { coverToCanvas, normalizeDirectorReference, normalizeV5Reference } from './normalize.ts'
 
 export interface NovelAiConfig {
   apiUrl: string
   apiKey: string
   model: string
+  /**
+   * What a reference image does on v5 models: `director` (default) sends it
+   * as a Precise Reference, `img2img` repaints it as the img2img source.
+   * v4/v4.5 models ignore this.
+   */
+  v5Reference?: 'director' | 'img2img' | undefined
 }
 
 export interface NovelAiPoints {
@@ -80,7 +86,7 @@ function firstZipEntry(zip: Buffer): Buffer {
   throw new Error('ZIP archive holds no readable entry')
 }
 
-/** NAI v5 family (`nai-diffusion-5-*`): multipart wire format, no director references yet. */
+/** NAI v5 family (`nai-diffusion-5-*`): multipart wire format, reference images ride as form parts. */
 export function isNaiV5Model(model: string): boolean {
   return /^nai-diffusion-5(-|$)/i.test(model.trim())
 }
@@ -167,18 +173,27 @@ function v4Body(model: string, request: ImageRequest, seed: number) {
   }
 }
 
+/** Form-part name of the (single) v5 Precise Reference image. */
+const V5_DIRECTOR_PART = 'director_ref_0'
+
+/** How the reference image of one v5 call is used, once it decoded successfully. */
+type V5ReferenceUse = 'none' | 'director' | 'img2img'
+
 /**
- * v5 body. v5 has no director references yet, so a reference image turns the
- * call into img2img; the source image itself travels as the separate `image`
- * form part, not inside this JSON. Strength and noise are NovelAI's own
- * img2img knobs (its UI defaults: 0.7 / 0).
+ * v5 body. The reference image never travels inside this JSON:
+ * - `director` (Precise Reference): `director_reference_images` lists the
+ *   NAMES of the form parts holding the image bytes, not the image data —
+ *   base64 here answers "image field references unknown form part". v5 has
+ *   no Fidelity, so the secondary strength stays 0.
+ * - `img2img`: the source is the separate `image` form part; strength and
+ *   noise are NovelAI's own img2img knobs (its UI defaults: 0.7 / 0).
  */
-function v5Body(model: string, request: ImageRequest, seed: number, img2img: boolean) {
+function v5Body(model: string, request: ImageRequest, seed: number, reference: V5ReferenceUse) {
   const medium = /-medium$/i.test(model.trim())
   return {
     input: request.prompt,
     model,
-    action: img2img ? 'img2img' : 'generate',
+    action: reference === 'img2img' ? 'img2img' : 'generate',
     use_new_shared_trial: true,
     parameters: {
       params_version: 4,
@@ -211,11 +226,23 @@ function v5Body(model: string, request: ImageRequest, seed: number, img2img: boo
       noise_schedule: 'karras',
       image_format: 'png',
       ...captionBlocks(request),
-      ...(img2img
+      ...(reference === 'img2img'
         ? {
             strength: Math.min(0.99, Math.max(0.01, request.img2imgStrength ?? 0.7)),
             noise: Math.min(0.99, Math.max(0, request.img2imgNoise ?? 0)),
             extra_noise_seed: seed,
+          }
+        : {}),
+      ...(reference === 'director'
+        ? {
+            director_reference_images: [V5_DIRECTOR_PART],
+            director_reference_descriptions: [{
+              caption: { base_caption: 'character&style', char_captions: [] },
+              legacy_uc: false,
+            }],
+            director_reference_strength_values: [Math.min(1, Math.max(0, request.referenceStrength ?? 1))],
+            director_reference_secondary_strength_values: [0],
+            director_reference_information_extracted: [1],
           }
         : {}),
     },
@@ -227,28 +254,41 @@ export function createNovelAiProvider(config: () => NovelAiConfig): ImageProvide
     id: 'novelai',
     available: () => config().apiKey.trim() !== '',
     async generate(request: ImageRequest): Promise<Buffer> {
-      const { apiUrl, apiKey, model: rawModel } = config()
+      const { apiUrl, apiKey, model: rawModel, v5Reference } = config()
       const model = rawModel.trim()
       const seed = randomInt(1, 4_294_967_295)
       let init: RequestInit
       if (isNaiV5Model(model)) {
-        // img2img sources must match the output size; a reference that fails
+        // A Precise Reference is cut to one of the v5 reference canvases; an
+        // img2img source must match the output size. A reference that fails
         // to decode falls back to plain text-to-image.
-        let source: Buffer | undefined
+        let use: V5ReferenceUse = 'none'
+        let image: Buffer | undefined
         if (request.reference) {
           try {
-            source = coverToCanvas(request.reference, request.width, request.height)
+            if (v5Reference === 'img2img') {
+              image = coverToCanvas(request.reference, request.width, request.height)
+              use = 'img2img'
+            } else {
+              image = normalizeV5Reference(request.reference)
+              use = 'director'
+            }
           } catch {
-            source = undefined
+            image = undefined
+            use = 'none'
           }
         }
         const form = new FormData()
+        // Part order follows NovelAI's own client: reference parts first, then `request`.
+        if (image && use === 'director') {
+          form.append(V5_DIRECTOR_PART, new Blob([new Uint8Array(image)], { type: 'image/png' }), 'blob')
+        }
         form.append(
           'request',
-          new Blob([JSON.stringify(v5Body(model, request, seed, source !== undefined))], { type: 'application/json' }),
+          new Blob([JSON.stringify(v5Body(model, request, seed, use))], { type: 'application/json' }),
           'blob',
         )
-        if (source) form.append('image', new Blob([new Uint8Array(source)], { type: 'image/png' }), 'image.png')
+        if (image && use === 'img2img') form.append('image', new Blob([new Uint8Array(image)], { type: 'image/png' }), 'image.png')
         // fetch sets the multipart Content-Type (with boundary) itself.
         init = { method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: form }
       } else {

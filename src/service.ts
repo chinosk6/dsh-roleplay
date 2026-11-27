@@ -68,6 +68,7 @@ export class RoleplayService extends Service {
         apiUrl: current().novelaiApiUrl,
         apiKey: current().novelaiApiKey,
         model: current().novelaiModel,
+        v5Reference: current().novelaiV5Reference,
       })),
       createSdWebUiProvider(() => ({
         baseUrl: current().sdwebuiBaseUrl,

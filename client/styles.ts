@@ -31,7 +31,17 @@ export const CSS = `
 .rp-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .rp-btn.rp-on{border-color:var(--dsw-alias-state-business-primary, #4d6bfe);color:var(--dsw-alias-state-business-primary, #4d6bfe)}
 .rp-btn:disabled{opacity:.5;cursor:default}
-.rp-cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;max-height:280px;overflow-y:auto;padding:2px}
+/* The harness styles every scrollbar from --dsh-scrollbar-* (5px wide, a thumb
+   one shade off the page): on this panel's gray surface that thumb is all but
+   invisible, and a clipped last row reads as the end of the list. The grid
+   re-points those variables for itself — wider, with real contrast — so the
+   harness's own scrollbar rules (and its non-WebKit fallback) keep applying.
+   Rows are max-content on purpose: the cells clip their overflow, which makes
+   their automatic minimum height zero, so plain auto rows under a max-height
+   collapse every card to its padding once the list is long enough to scroll. */
+.rp-cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));grid-auto-rows:max-content;gap:8px;max-height:min(48vh,440px);overflow-y:auto;overscroll-behavior:contain;padding:2px 4px 2px 2px;--dsh-scrollbar-width:8px;--dsh-scrollbar-thumb:color-mix(in srgb,var(--dsw-alias-label-tertiary) 55%,transparent);--dsh-scrollbar-thumb-hover:var(--dsw-alias-label-tertiary)}
+.rp-search{flex:0 1 220px;min-width:120px;box-sizing:border-box;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);padding:4px 8px;font-family:inherit;font-size:12px;line-height:18px}
+.rp-search::placeholder{color:var(--dsw-alias-label-tertiary)}
 .rp-cardcell{cursor:pointer;display:flex;gap:8px;align-items:center;padding:8px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-module-platform);text-align:left;font-family:inherit;color:var(--dsw-alias-label-primary);position:relative;overflow:hidden}
 .rp-cardcell:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}
 .rp-cardcell .rp-cardname,.rp-cardcell .rp-cardnote{display:block;position:relative;z-index:1}

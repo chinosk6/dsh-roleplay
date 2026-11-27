@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { IconQuestionOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, formatBytes, pngBytesOf, stampedUrl, type CardSummary, type ErpPoints, type GalleryUsage, type NovelAiPoints, type RoleplaySettingsValue, type StoreScope } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
+import { CARD_SEARCH_MIN, CardSearch, filterCards } from './card-search.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
 import { currentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
 import { useT, tf } from './i18n.ts'
@@ -39,7 +40,7 @@ const ERPSEX_MODELS: readonly ModelPreset[] = [
   { value: 'wai illustrious', label: 'WAI Illustrious' },
 ]
 
-/** NAI v5 has no director reference; mirrors the host's isNaiV5Model / erpSexTypeOf. */
+/** NAI v5 handles reference images its own way; mirrors the host's isNaiV5Model / erpSexTypeOf. */
 function isNaiV5(model: string): boolean {
   const lower = model.trim().toLowerCase().replace(/\s+/g, ' ')
   return /^nai-diffusion-5(-|$)/.test(lower) || lower === 'nai v5 full' || lower === 'nai v5 medium'
@@ -176,6 +177,9 @@ export function RoleplaySettingsSection(): ReactNode {
   const providerLabel = providerStatus
     ? providerStatus.available ? t('rp.image.ready') : providerStatus.provider === 'none' ? t('rp.image.off') : t('rp.image.incomplete')
     : ''
+
+  /** A reference image is in use on the official NovelAI backend with a v5 model. */
+  const officialV5 = draft.referenceMode !== 'none' && draft.imageProvider === 'novelai' && isNaiV5(draft.novelaiModel)
 
   return (
     <div className="rp-settings">
@@ -315,8 +319,19 @@ export function RoleplaySettingsSection(): ReactNode {
             <option value="custom">{t('rp.image.ref.custom')}</option>
           </select>
         </Field>
-        {draft.referenceMode !== 'none' && draft.imageProvider === 'novelai' && isNaiV5(draft.novelaiModel) ? (
-          // Official v5 = img2img: NovelAI's own Strength/Noise knobs replace the reference strength.
+        {officialV5 ? (
+          <Field label={t('rp.image.v5Reference')}>
+            <select
+              value={draft.novelaiV5Reference}
+              onChange={event => patch({ novelaiV5Reference: event.target.value as Draft['novelaiV5Reference'] })}
+            >
+              <option value="director">{t('rp.image.v5Reference.director')}</option>
+              <option value="img2img">{t('rp.image.v5Reference.img2img')}</option>
+            </select>
+          </Field>
+        ) : null}
+        {officialV5 && draft.novelaiV5Reference === 'img2img' ? (
+          // Official v5 as img2img: NovelAI's own Strength/Noise knobs replace the reference strength.
           <div className="rp-inline">
             <Field label={t('rp.image.img2imgStrength')}>
               <input
@@ -341,10 +356,11 @@ export function RoleplaySettingsSection(): ReactNode {
             </Field>
           </div>
         ) : null}
-        {draft.referenceMode !== 'none' && (
-          (draft.imageProvider === 'novelai' && isNaiV5(draft.novelaiModel))
-          || (draft.imageProvider === 'erpsex' && isNaiV5(draft.erpsexModel))
-        ) ? <span className="rp-note">{t('rp.image.ref.v5Hint')}</span> : null}
+        {officialV5 && draft.novelaiV5Reference === 'img2img' ? (
+          <span className="rp-note">{t('rp.image.ref.v5Img2imgHint')}</span>
+        ) : officialV5 || (draft.referenceMode !== 'none' && draft.imageProvider === 'erpsex' && isNaiV5(draft.erpsexModel)) ? (
+          <span className="rp-note">{t('rp.image.ref.v5Hint')}</span>
+        ) : null}
         {draft.referenceMode === 'custom' ? <ReferenceUploader /> : null}
       </div>
 
@@ -652,10 +668,12 @@ function GalleryEntry({ onOpen, ws }: { onOpen: () => void; ws?: string | undefi
 function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: WorkspaceInfo | undefined }): ReactNode {
   const t = useT()
   const [cards, setCards] = useState<CardSummary[] | null>(null)
+  const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const wsPath = ws?.path
+  const shown = cards ? filterCards(cards, query) : []
 
   const reload = useCallback(() => {
     api.cards(wsPath).then(result => setCards(result.cards)).catch(err => setError(String(err instanceof Error ? err.message : err)))
@@ -701,15 +719,24 @@ function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: Wor
           onChange={event => void importFiles(event.target.files)}
         />
         <span className="rp-note">{t('rp.cards.importHint')}</span>
+        {cards && cards.length >= CARD_SEARCH_MIN ? (
+          <>
+            <span className="rp-spacer" />
+            <CardSearch value={query} onChange={setQuery} />
+            <span className="rp-note">{shown.length} / {cards.length}</span>
+          </>
+        ) : null}
       </div>
       {error ? <div className="rp-error">{error}</div> : null}
       {cards === null ? (
         <span className="rp-note">{t('rp.settings.loading')}</span>
       ) : cards.length === 0 ? (
         <span className="rp-note">{t('rp.cards.empty')}</span>
+      ) : shown.length === 0 ? (
+        <span className="rp-note">{t('rp.cards.noMatch')}</span>
       ) : (
         <div>
-          {cards.map(card => (
+          {shown.map(card => (
             <div key={`${card.scope}-${card.id}`} className="rp-cardrow">
               {card.avatarUrl
                 ? <img className="rp-avatar" src={stampedUrl(card.avatarUrl, card.updatedAt)} alt={card.name} />

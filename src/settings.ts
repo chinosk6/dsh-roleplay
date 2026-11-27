@@ -62,6 +62,8 @@ export interface RoleplaySettings {
   referenceMode: 'none' | 'avatar' | 'custom'
   /** How strongly the reference influences the output (0-1). */
   referenceStrength: number
+  /** Official NAI v5 only: use the reference as a Precise Reference (`director`) or as the img2img source. */
+  novelaiV5Reference: 'director' | 'img2img'
   /** NAI v5 img2img strength (how much the source is repainted), as in NovelAI's own UI. */
   img2imgStrength: number
   /** NAI v5 img2img noise added to the source before repainting. */
@@ -111,6 +113,7 @@ const fields = {
   imageAggressiveness: z.union(['conservative', 'active', 'force']).default('active'),
   referenceMode: z.union(['none', 'avatar', 'custom']).default('none'),
   referenceStrength: z.number().min(0).max(1).default(1),
+  novelaiV5Reference: z.union(['director', 'img2img']).default('director'),
   img2imgStrength: z.number().min(0.01).max(0.99).default(0.7),
   img2imgNoise: z.number().min(0).max(0.99).default(0),
   choiceMode: z.boolean().default(false),
